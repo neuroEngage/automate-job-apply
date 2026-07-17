@@ -1,0 +1,63 @@
+name: JobRadar Daily Job Scan
+
+on:
+  # Daily cron: 2:00 UTC = 7:30 AM IST
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Manual trigger from GitHub UI (no code changes needed)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (scrape + score only, no sheet writes)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  daily_scan:
+    name: Run JobRadar Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30       # safety ceiling — a stuck run won't rack up costs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run JobRadar pipeline
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: python main.py
+
+      - name: Upload run log as artifact (for debugging)
+        if: always()   # upload even on failure
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobradar-run-log-${{ github.run_number }}
+          path: jobradar_run.log
+          retention-days: 14
+
+      - name: Upload generated resumes (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobradar-resumes-${{ github.run_number }}
+          path: resumes/
+          if-no-files-found: ignore
+          retention-days: 30

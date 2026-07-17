@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar — Python Dependencies
+# Pin versions for reproducible GitHub Actions runs
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Scraping
+python-jobspy>=0.1.0          # JobSpy: Indeed, Glassdoor, Google, ZipRecruiter
+apify-client>=1.7.0           # Apify API client (LinkedIn + Naukri actors)
+
+# Google Sheets & Drive
+gspread>=6.1.0                # Google Sheets Python API
+google-auth>=2.29.0           # Service account auth for gspread
+google-api-python-client>=2.125.0  # Google Drive API (resume upload)
+google-auth-httplib2>=0.2.0
+
+# AI / LLM
+anthropic>=0.28.0             # Claude Haiku for Stage B scoring + resume tailoring
+
+# Resume generation
+python-docx>=1.1.0            # .docx generation for ATS resumes
+
+# Config & utilities
+pyyaml>=6.0.1                 # config.yaml parsing
+requests>=2.31.0              # HTTP requests for company page validation
+python-dateutil>=2.9.0        # Robust date parsing from multiple formats
+
+# Testing (dev only — not needed in prod)
+pytest>=8.2.0

@@ -1,0 +1,214 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar — Search & Scoring Configuration
+# Edit this file to retune titles, thresholds, or budget without touching code.
+# ─────────────────────────────────────────────────────────────────────────────
+
+candidate_profile:
+  name: "Nagesh Khichade"
+  total_yoe: 1                     # ~5mo Manthan contract + 2 internships (continuous YOE)
+  counts_freelance: true             # Manthan LLC contract counts equally as full-time
+  ideal_yoe_band: [0, 1]            # SWEET SPOT — fresher/0-1yr postings score highest
+  max_acceptable_yoe: 2             # 1-2 yrs = pass, no penalty
+  stretch_yoe: 4                    # 2-4 yrs = included but score capped, flagged "stretch"
+  hard_exclude_above_yoe: 4         # >4 yrs required → Reach Roles tab, not main sheet
+
+  # ── Skill list used for keyword-overlap scoring (Stage A) ──────────────────
+  skills:
+    - Python
+    - SQL
+    - LLM fine-tuning
+    - Gemma
+    - prompt engineering
+    - RAG
+    - EDA
+    - exploratory data analysis
+    - Power BI
+    - AWS
+    - Spark
+    - classical ML
+    - machine learning
+    - pandas
+    - NumPy
+    - scikit-learn
+    - TensorFlow
+    - PyTorch
+    - data visualization
+    - Tableau
+    - BigQuery
+    - Hive
+    - PySpark
+    - NLP
+    - generative AI
+    - GenAI
+    - data pipeline
+    - ETL
+    - data lake
+    - data warehouse
+    - A/B testing
+    - business intelligence
+    - BI
+    - analytics
+
+  # ── Two-tier title config (DO NOT flatten — tier drives scoring weight) ─────
+  # Tier 1: CDAC BDA-aligned, highest weight. Tier 2: additive, lower weight.
+  target_titles_tier1_core_data:
+    - "Data Analyst"
+    - "Data Scientist"
+    - "Data Engineer"
+    - "AI Engineer"
+    - "ML Engineer"
+    - "AI/ML Engineer"
+    - "GenAI Engineer"
+    - "LLM Engineer"
+    - "Prompt Engineer"
+    - "BI Developer"
+    - "BI Analyst"
+    - "Business Intelligence Analyst"
+    - "Analytics Engineer"
+    - "Research Analyst"
+    - "Big Data Engineer"
+    - "Data Research Analyst"
+
+  target_titles_tier2_broader:
+    - "Product Associate"
+    - "AI Product Associate"
+    - "Associate Product Manager"
+    - "Junior Product Manager"
+    - "Product Analyst"
+    - "Business Analyst"
+    - "Growth Analyst"
+    - "GTM Associate"
+    - "Founder's Office Associate"
+    - "Chief of Staff Associate"
+    - "AI Solutions Consultant"
+    - "Strategy Associate"
+
+  # ── Compensation filters ───────────────────────────────────────────────────
+  currency_targets_remote: ["USD", "EUR", "GBP"]
+  min_remote_comp_usd_equivalent: 30000   # annual floor for global-remote listings
+  min_mumbai_comp_inr_lpa: 8             # flags (doesn't exclude) low Mumbai comp
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sources
+# ─────────────────────────────────────────────────────────────────────────────
+sources:
+  # Each source runs TWICE per run: once for tier1 titles, once for tier2.
+  # This lets the scorer tag role_tier on every incoming job.
+
+  mumbai_local:
+    engine: apify_linkedin             # valig/linkedin-jobs-scraper
+    location: "Mumbai, Maharashtra, India"
+    date_posted: "r604800"             # last 7 days; dedup catches yesterday's already
+    max_results_per_title: 25
+    max_charge_usd_per_call: 0.05      # hard Apify budget per call
+
+  india_remote:
+    engine: jobspy
+    sites: ["indeed", "google"]
+    location: "India"
+    is_remote: true
+    hours_old: 168
+    max_results_per_title: 30
+    country_indeed: "IN"
+
+  naukri:
+    engine: apify_naukri               # epic-scrapers/naukri-scraper
+    location: "Mumbai,India"
+    experience_min: 0
+    experience_max: 3                  # don't bother fetching >3yr listings
+    max_results_per_title: 30
+    max_charge_usd_per_call: 0.05
+
+  global_remote:
+    engine: jobspy
+    sites: ["indeed", "glassdoor", "google", "zip_recruiter"]
+    location: "Remote"
+    is_remote: true
+    hours_old: 168
+    max_results_per_title: 25
+    country_indeed: ["USA", "UK", "Germany", "Netherlands", "Singapore", "Canada"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scoring weights & bonuses
+# ─────────────────────────────────────────────────────────────────────────────
+scoring:
+  # Stage A formula:
+  # score = (skill_w * skill * tier_mult) + (exp_w * exp_fit) + (comp_w * comp_fit)
+  #         + recency_bonus + region_bonus - tier2_flat_penalty
+  skill_weight: 0.35
+  exp_weight: 0.25
+  comp_weight: 0.25
+  # remaining 0.15 is shared between recency + region bonuses
+
+  # Recency scoring (max +2.0 to overall score)
+  # Preference: most recent = highest, 0-3 days best window
+  recency_bonus:
+    days_0_to_3: 2.0      # HIGHEST — freshest postings, most likely still open
+    days_4_to_7: 1.5
+    days_8_to_14: 0.75
+    days_15_to_30: 0.25
+    days_over_30: 0.0
+
+  # Region priority bonus (added directly to overall score)
+  region_bonus:
+    mumbai: 1.5
+    india_remote: 0.75
+    naukri: 1.0            # India-local, treated between mumbai and india_remote
+    global_remote: 0.0
+
+  # Role Tier weight applied to skill component only
+  tier2_skill_multiplier: 0.85    # tier2 skill score * 0.85
+  tier2_flat_penalty: 0.5         # subtract 0.5 from final score for tier2
+
+  # Stage B (Claude Haiku) threshold — only jobs above this get LLM refinement
+  stage_b_min_score: 6.0
+
+  # ATS resume generation threshold
+  resume_min_score: 7.5
+  resume_max_per_day: 5           # HARD CAP — not configurable without editing this line
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Company page validation
+# ─────────────────────────────────────────────────────────────────────────────
+validation:
+  enabled: true
+  # Run validation for all jobs where overall_score_stage_a >= this threshold
+  min_score_to_validate: 5.0
+  # Timeout per company page HTTP request (seconds)
+  request_timeout_sec: 10
+  # If validation fails (no careers page found / request error), keep job but flag it
+  on_failure: "flag"              # "flag" | "exclude"
+  # Mark a job as "stale" if its listing URL returns 404 or title not found on careers page
+  stale_label: "⚠️ Possibly Stale"
+  # User-agent for career page requests (polite scraping)
+  user_agent: "Mozilla/5.0 (JobRadar validation bot; contact: nagesh@example.com)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Budget guard
+# ─────────────────────────────────────────────────────────────────────────────
+budget:
+  monthly_ceiling_usd: 10.00      # HARD CAP — $10/month max total spend
+  # When ceiling hit: skip Stage B + resume gen, keep free scraping + Stage A
+  degraded_mode_label: "budget_cap_hit"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Google Sheets
+# ─────────────────────────────────────────────────────────────────────────────
+sheets:
+  # Tab names (change here if you rename tabs in the Sheet)
+  job_tracker_tab: "Job Tracker"
+  seen_jobs_tab: "SeenJobs"
+  archive_tab: "Archive"
+  reach_roles_tab: "Reach Roles (5yr+)"
+  run_log_tab: "Run Log"
+  # Archive jobs older than this many days (with no re-sighting)
+  archive_after_days: 30
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Claude model selection
+# ─────────────────────────────────────────────────────────────────────────────
+llm:
+  scoring_model: "claude-haiku-4-5"   # cheapest — repetitive classification task
+  resume_model: "claude-haiku-4-5"    # capped at 5/day anyway; Haiku sufficient
+  max_jds_per_batch: 10               # Stage B batch size
+  max_jd_chars: 4000                  # truncation limit per JD (cost control)

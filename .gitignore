@@ -1,0 +1,30 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ── Secrets & credentials — NEVER commit these ───────────────────────────────
+*.json
+!resume_base.json        # resume base IS committed (no keys inside)
+*.pem
+*.key
+.env
+.env.*
+
+# ── Runtime outputs ──────────────────────────────────────────────────────────
+jobradar_run.log
+resumes/
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
