@@ -142,3 +142,5 @@ Key sections:
 4. **No budget overrun** — MonthlyBudgetGuard degrades gracefully when ceiling hit.
 5. **No auto-apply** — this system surfaces and prepares; Nagesh clicks Apply.
 6. **No silent failures** — every run writes to Run Log, even failed ones.
+
+<!-- workflow re-index trigger -->
