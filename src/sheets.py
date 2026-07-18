@@ -16,14 +16,10 @@ import os
 from datetime import date
 
 import gspread
-from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger(__name__)
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Column definition for Job Tracker tab (exact order = sheet columns)
@@ -92,11 +88,12 @@ def connect_sheet(sheet_id: str) -> gspread.Spreadsheet:
         raise EnvironmentError("GOOGLE_SERVICE_ACCOUNT_JSON env var not set")
 
     creds_info = json.loads(sa_json)
-    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
+    # gspread v6+: use service_account_from_dict() — gspread.authorize() was removed
+    gc = gspread.service_account_from_dict(creds_info)
     sheet = gc.open_by_key(sheet_id)
     logger.info(f"Connected to Google Sheet: {sheet.title}")
     return sheet
+
 
 
 def ensure_tabs(sheet: gspread.Spreadsheet, config: dict) -> None:
