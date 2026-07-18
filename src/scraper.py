@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from typing import Any
+from datetime import timedelta
 
 import yaml
 from apify_client import ApifyClient
@@ -40,7 +41,7 @@ def _run_apify_actor(
     budget_guard.check_and_debit("apify", cost_estimate_usd)
     client = _apify_client()
     logger.info(f"Running Apify actor {actor_id} with input {run_input}")
-    run = client.actor(actor_id).call(run_input=run_input, timeout_secs=timeout_secs)
+            run = client.actor(actor_id).call(run_input=run_input, wait_duration=timedelta(seconds=timeout_secs))
     items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
     logger.info(f"Apify actor {actor_id} returned {len(items)} items")
     return items
