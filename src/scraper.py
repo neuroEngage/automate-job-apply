@@ -10,9 +10,6 @@ import logging
 import os
 import time
 from typing import Any
-from datetime import timedelta
-
-import yaml
 from apify_client import ApifyClient
 from jobspy import scrape_jobs  # type: ignore[import]
 
@@ -40,7 +37,8 @@ def _run_apify_actor(
     """Run an Apify actor synchronously and return its dataset items."""
     budget_guard.check_and_debit("apify", cost_estimate_usd)
     client = _apify_client()
-    logger.info(f"Running Apify actor {actor_id} with input {run_input}"run = client.actor(actor_id).call(run_input=run_input, wait_duration=timedelta(seconds=timeout_secs))
+    logger.info(f"Running Apify actor {actor_id} with input {run_input}")
+    run = client.actor(actor_id).call(run_input=run_input, wait_secs=timeout_secs)
     items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
     logger.info(f"Apify actor {actor_id} returned {len(items)} items")
     return items
