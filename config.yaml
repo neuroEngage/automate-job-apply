@@ -181,7 +181,7 @@ validation:
   # Mark a job as "stale" if its listing URL returns 404 or title not found on careers page
   stale_label: "⚠️ Possibly Stale"
   # User-agent for career page requests (polite scraping)
-  user_agent: "Mozilla/5.0 (JobRadar validation bot; contact: nagesh@example.com)"
+  user_agent: "Mozilla/5.0 (JobRadar validation bot; contact: nageshkhichade00@gmail.com)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Budget guard
