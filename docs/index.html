@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobRadar — Live Job Intelligence Dashboard</title>
+    
+    <!-- Modern Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- CSS Design System -->
+    <style>
+        :root {
+            /* Colors */
+            --bg-base: 222 47% 11%;        /* Deep dark blue #0b0f19 */
+            --bg-surface: 220 40% 16%;     /* Translucent card slate #131a2c */
+            --bg-surface-hover: 220 38% 22%;
+            --border-color: 220 30% 24%;
+            --primary: 250 84% 67%;       /* Vivid Indigo #6366f1 */
+            --primary-hover: 250 95% 72%;
+            --primary-glow: 250 84% 67% / 0.15;
+            --success: 150 80% 40%;       /* Emerald Green */
+            --success-glow: 150 80% 40% / 0.15;
+            --warning: 35 90% 50%;        /* Amber Orange */
+            --warning-glow: 35 90% 50% / 0.15;
+            --danger: 350 80% 55%;        /* Rose Red */
+            --danger-glow: 350 80% 55% / 0.15;
+            --text-main: 210 40% 98%;     /* Creamy white */
+            --text-muted: 215 20% 65%;    /* Soft grey */
+            
+            /* Animations & Transition */
+            --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Reset & Base */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: hsl(var(--bg-base));
+            color: hsl(var(--text-main));
+            line-height: 1.5;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Premium Glow Backgrounds */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -200px;
+            left: 20%;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, hsl(var(--primary) / 0.12) 0%, transparent 70%);
+            z-index: -1;
+            pointer-events: none;
+            filter: blur(80px);
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            bottom: 10%;
+            right: 10%;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, hsl(var(--success-glow)) 0%, transparent 70%);
+            z-index: -1;
+            pointer-events: none;
+            filter: blur(100px);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+
+        .brand-section h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 40%, hsl(var(--primary)));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-section p {
+            color: hsl(var(--text-muted));
+            font-size: 0.95rem;
+            margin-top: 0.25rem;
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .badge-status {
+            background-color: hsl(var(--bg-surface));
+            border: 1px solid hsl(var(--border-color));
+            padding: 0.5rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: hsl(var(--success));
+            box-shadow: 0 0 0 0 hsl(var(--success) / 0.7);
+            animation: pulse 1.6s infinite;
+        }
+
+        .pulse-dot.warning {
+            background-color: hsl(var(--warning));
+            box-shadow: 0 0 0 0 hsl(var(--warning) / 0.7);
+            animation: pulse-warn 1.6s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.9);
+                box-shadow: 0 0 0 0 hsl(var(--success) / 0.7);
+            }
+            70% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 6px hsl(var(--success) / 0);
+            }
+            100% {
+                transform: scale(0.9);
+                box-shadow: 0 0 0 0 hsl(var(--success) / 0);
+            }
+        }
+
+        @keyframes pulse-warn {
+            0% {
+                transform: scale(0.9);
+                box-shadow: 0 0 0 0 hsl(var(--warning) / 0.7);
+            }
+            70% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 6px hsl(var(--warning) / 0);
+            }
+            100% {
+                transform: scale(0.9);
+                box-shadow: 0 0 0 0 hsl(var(--warning) / 0);
+            }
+        }
+
+        .btn-github {
+            background-color: hsl(var(--bg-surface));
+            border: 1px solid hsl(var(--border-color));
+            color: hsl(var(--text-main));
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition-smooth);
+        }
+
+        .btn-github:hover {
+            background-color: hsl(var(--bg-surface-hover));
+            border-color: hsl(var(--primary));
+        }
+
+        /* Onboarding Banner & Flow */
+        .onboarding-card {
+            background: linear-gradient(135deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-surface) / 0.8) 100%);
+            border: 1px solid hsl(var(--primary) / 0.3);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+        }
+
+        .onboarding-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .onboarding-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .onboarding-step {
+            background: hsl(var(--bg-base) / 0.5);
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .onboarding-step h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.05rem;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--primary-hover));
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .onboarding-step p {
+            font-size: 0.85rem;
+            color: hsl(var(--text-muted));
+            margin-bottom: 0.75rem;
+        }
+
+        .onboarding-step code {
+            font-family: monospace;
+            background-color: hsl(var(--bg-base));
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            word-break: break-all;
+        }
+
+        .onboarding-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-demo {
+            background: linear-gradient(135deg, hsl(var(--primary)) 0%, #4f46e5 100%);
+            border: none;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition-smooth);
+            box-shadow: 0 4px 14px 0 hsl(var(--primary) / 0.4);
+        }
+
+        .btn-demo:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 hsl(var(--primary) / 0.6);
+        }
+
+        /* Stats Dashboard Row */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-surface) / 0.7) 100%);
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 14px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: var(--transition-smooth);
+            backdrop-filter: blur(8px);
+        }
+
+        .stat-card:hover {
+            border-color: hsl(var(--primary) / 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: hsl(var(--primary));
+            opacity: 0.7;
+        }
+
+        .stat-card.success::before { background: hsl(var(--success)); }
+        .stat-card.warning::before { background: hsl(var(--warning)); }
+        .stat-card.danger::before { background: hsl(var(--danger)); }
+
+        .stat-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: hsl(var(--text-muted));
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .stat-trend {
+            font-size: 0.75rem;
+            color: hsl(var(--text-muted));
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        /* Tabs Selection */
+        .tabs-container {
+            display: flex;
+            border-bottom: 1px solid hsl(var(--border-color));
+            margin-bottom: 1.5rem;
+            gap: 1.5rem;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: hsl(var(--text-muted));
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            padding: 0.75rem 0.5rem;
+            cursor: pointer;
+            position: relative;
+            transition: var(--transition-smooth);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn:hover {
+            color: hsl(var(--text-main));
+        }
+
+        .tab-btn.active {
+            color: hsl(var(--primary-hover));
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: hsl(var(--primary));
+            border-radius: 999px;
+        }
+
+        /* Controls Section (Filters) */
+        .controls-card {
+            background-color: hsl(var(--bg-surface));
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 14px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .controls-row-top {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 260px;
+        }
+
+        .search-wrapper svg {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: hsl(var(--text-muted));
+            pointer-events: none;
+            width: 16px;
+            height: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            background-color: hsl(var(--bg-base));
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem 0.6rem 2.25rem;
+            color: #ffffff;
+            font-size: 0.9rem;
+            outline: none;
+            transition: var(--transition-smooth);
+        }
+
+        .search-input:focus {
+            border-color: hsl(var(--primary));
+            box-shadow: 0 0 0 1px hsl(var(--primary) / 0.5);
+        }
+
+        .filters-wrapper {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-select {
+            background-color: hsl(var(--bg-base));
+            border: 1px solid hsl(var(--border-color));
+            color: hsl(var(--text-main));
+            padding: 0.6rem 2rem 0.6rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            outline: none;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(156, 163, 175, 0.8)' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.25em;
+        }
+
+        .filter-select:hover, .filter-select:focus {
+            border-color: hsl(var(--primary));
+        }
+
+        .controls-row-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: hsl(var(--text-muted));
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .slider-group label {
+            font-weight: 500;
+        }
+
+        .range-slider {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 4px;
+            background: hsl(var(--border-color));
+            border-radius: 9999px;
+            outline: none;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: hsl(var(--primary));
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .range-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: hsl(var(--primary-hover));
+        }
+
+        .active-filters {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-pill {
+            background-color: hsl(var(--primary) / 0.1);
+            border: 1px solid hsl(var(--primary) / 0.3);
+            color: hsl(var(--primary-hover));
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .filter-pill button {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            font-size: 0.8rem;
+            line-height: 1;
+        }
+
+        .filter-pill button:hover {
+            color: #ffffff;
+        }
+
+        /* Grid View */
+        .jobs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .job-card {
+            background: linear-gradient(135deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-surface) / 0.8) 100%);
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            position: relative;
+            transition: var(--transition-smooth);
+            backdrop-filter: blur(12px);
+        }
+
+        .job-card:hover {
+            transform: translateY(-4px);
+            border-color: hsl(var(--primary) / 0.4);
+            box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 1px 1px hsl(var(--primary) / 0.1);
+        }
+
+        .job-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .job-title-company {
+            flex: 1;
+        }
+
+        .job-title-company h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.3;
+            margin-bottom: 0.2rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .job-company {
+            font-weight: 500;
+            color: hsl(var(--primary-hover));
+            font-size: 0.9rem;
+        }
+
+        .score-badge {
+            background: linear-gradient(135deg, hsl(var(--bg-base)) 0%, hsl(var(--border-color)) 100%);
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 12px;
+            padding: 0.5rem;
+            min-width: 54px;
+            height: 54px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .score-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 800;
+            line-height: 1;
+            color: #ffffff;
+        }
+
+        .score-value.high { color: hsl(var(--success)); }
+        .score-value.medium { color: hsl(var(--warning)); }
+        .score-value.low { color: hsl(var(--danger)); }
+
+        .score-label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            color: hsl(var(--text-muted));
+            font-weight: 600;
+            margin-top: 1px;
+        }
+
+        /* Badges */
+        .badge-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-tier1 {
+            background-color: hsl(var(--primary) / 0.15);
+            color: hsl(var(--primary-hover));
+            border: 1px solid hsl(var(--primary) / 0.3);
+        }
+
+        .badge-tier2 {
+            background-color: hsl(280 80% 60% / 0.15);
+            color: hsl(280 90% 75%);
+            border: 1px solid hsl(280 80% 60% / 0.3);
+        }
+
+        .badge-startup {
+            background-color: hsl(190 80% 45% / 0.15);
+            color: hsl(190 90% 60%);
+            border: 1px solid hsl(190 80% 45% / 0.3);
+        }
+
+        .badge-recency {
+            background-color: hsl(var(--success-glow));
+            color: hsl(var(--success));
+            border: 1px solid hsl(var(--success) / 0.3);
+        }
+
+        .badge-stale {
+            background-color: hsl(var(--danger-glow));
+            color: hsl(var(--danger));
+            border: 1px solid hsl(var(--danger) / 0.3);
+        }
+
+        /* Job Meta list */
+        .meta-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.6rem;
+            font-size: 0.8rem;
+            color: hsl(var(--text-muted));
+            background: hsl(var(--bg-base) / 0.3);
+            padding: 0.6rem 0.8rem;
+            border-radius: 8px;
+            border: 1px solid hsl(var(--border-color) / 0.5);
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .meta-item svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        /* Match Bars */
+        .match-bars-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .match-bar-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        .match-bar-label {
+            width: 70px;
+            color: hsl(var(--text-muted));
+            font-weight: 500;
+        }
+
+        .match-bar-track {
+            flex: 1;
+            height: 5px;
+            background-color: hsl(var(--border-color));
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .match-bar-fill {
+            height: 100%;
+            background-color: hsl(var(--primary));
+            border-radius: 9999px;
+        }
+
+        .match-bar-value {
+            font-family: monospace;
+            width: 24px;
+            text-align: right;
+            color: #ffffff;
+        }
+
+        /* Action Buttons */
+        .job-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: auto;
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            transition: var(--transition-smooth);
+            text-align: center;
+        }
+
+        .btn-action-primary {
+            background-color: hsl(var(--primary));
+            color: white;
+            border: 1px solid transparent;
+        }
+
+        .btn-action-primary:hover {
+            background-color: hsl(var(--primary-hover));
+        }
+
+        .btn-action-secondary {
+            background-color: hsl(var(--bg-base));
+            color: hsl(var(--text-main));
+            border: 1px solid hsl(var(--border-color));
+        }
+
+        .btn-action-secondary:hover:not(:disabled) {
+            border-color: hsl(var(--primary));
+            background-color: hsl(var(--bg-surface-hover));
+        }
+
+        .btn-action:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Expandable Notes section */
+        .expandable-trigger {
+            background: none;
+            border: none;
+            color: hsl(var(--text-muted));
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            cursor: pointer;
+            padding-top: 0.5rem;
+            border-top: 1px solid hsl(var(--border-color) / 0.5);
+            transition: var(--transition-smooth);
+        }
+
+        .expandable-trigger:hover {
+            color: #ffffff;
+        }
+
+        .expandable-trigger svg {
+            width: 14px;
+            height: 14px;
+            transition: var(--transition-smooth);
+        }
+
+        .expandable-trigger.expanded svg {
+            transform: rotate(180deg);
+        }
+
+        .expandable-content {
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .expandable-content.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .analysis-note-box {
+            background-color: hsl(var(--bg-base) / 0.4);
+            border-left: 2px solid hsl(var(--primary));
+            padding: 0.5rem 0.75rem;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .analysis-note-title {
+            font-weight: 600;
+            color: hsl(var(--primary-hover));
+            margin-bottom: 0.2rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .analysis-flags-box {
+            background-color: hsl(var(--danger) / 0.08);
+            border-left: 2px solid hsl(var(--danger));
+            padding: 0.5rem 0.75rem;
+            border-radius: 0 4px 4px 0;
+            color: hsl(350 90% 75%);
+        }
+
+        .analysis-flags-title {
+            font-weight: 600;
+            color: hsl(var(--danger));
+            margin-bottom: 0.2rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Run Logs Panel */
+        .logs-panel {
+            background-color: hsl(var(--bg-surface));
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 16px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            backdrop-filter: blur(12px);
+        }
+
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        .logs-table th {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid hsl(var(--border-color));
+            color: hsl(var(--text-muted));
+            font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .logs-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid hsl(var(--border-color) / 0.5);
+            color: hsl(var(--text-main));
+        }
+
+        .logs-table tr:hover {
+            background-color: hsl(var(--bg-surface-hover) / 0.4);
+        }
+
+        .error-log-cell {
+            max-width: 250px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .error-log-cell.has-error {
+            color: hsl(var(--danger));
+            font-weight: 500;
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 4rem 2rem;
+            background-color: hsl(var(--bg-surface));
+            border: 1px dashed hsl(var(--border-color));
+            border-radius: 16px;
+            color: hsl(var(--text-muted));
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        /* Utilities */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .flex-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <!-- Header -->
+        <header>
+            <div class="brand-section">
+                <h1>
+                    <!-- Radar SVG Icon -->
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                    </svg>
+                    JobRadar
+                </h1>
+                <p>Daily Swarm Search & AI Scoring Pipeline</p>
+            </div>
+            
+            <div class="header-meta">
+                <div id="connection-status" class="badge-status">
+                    <span id="connection-dot" class="pulse-dot warning"></span>
+                    <span id="connection-text">Awaiting Sheet Config</span>
+                </div>
+                
+                <div class="badge-status">
+                    <!-- Calendar SVG -->
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <span>Daily @ 7:30 AM IST</span>
+                </div>
+                
+                <a href="https://github.com/neuroEngage/automate-job-apply" target="_blank" class="btn-github">
+                    <!-- GitHub icon SVG -->
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    GitHub Actions
+                </a>
+            </div>
+        </header>
+
+        <!-- Onboarding walkthrough (shown if placeholders exist) -->
+        <div id="onboarding-flow" class="onboarding-card">
+            <div class="onboarding-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                Setup Required: Live Google Sheets CSV Integration
+            </div>
+            
+            <div class="onboarding-steps">
+                <div class="onboarding-step">
+                    <h3>1. Publish tabs as CSV</h3>
+                    <p>In your Google Sheet, choose <strong>File > Share > Publish to web</strong>. Pick the <code>Job Tracker</code> tab as <strong>Comma-separated values (.csv)</strong> and click Publish. Repeat for the <code>Run Log</code> tab.</p>
+                </div>
+                
+                <div class="onboarding-step">
+                    <h3>2. Insert Published URLs</h3>
+                    <p>Open <code>docs/index.html</code> in your editor and paste the URLs into the variables at the top of the <code>&lt;script&gt;</code> block.</p>
+                </div>
+                
+                <div class="onboarding-step">
+                    <h3>3. Push to master</h3>
+                    <p>Commit the file and push it. The GitHub Actions build will update your Pages dashboard page automatically in seconds.</p>
+                </div>
+            </div>
+            
+            <div class="onboarding-actions">
+                <button id="load-demo-btn" class="btn-demo">
+                    <!-- Play icon -->
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Load Interactive Demo Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats Row -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">All-time Scraped</span>
+                <span id="stat-scraped" class="stat-value">—</span>
+                <span class="stat-trend">Total jobs processed</span>
+            </div>
+            <div class="stat-card success">
+                <span class="stat-label">Active Job Pipeline</span>
+                <span id="stat-pipeline" class="stat-value">—</span>
+                <span class="stat-trend">Ready in main tracker</span>
+            </div>
+            <div class="stat-card warning">
+                <span class="stat-label">Avg Scorer Rating</span>
+                <span id="stat-avg-score" class="stat-value">—</span>
+                <span class="stat-trend">Out of 10.0 max</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Spend Tracker</span>
+                <span id="stat-spend" class="stat-value">—</span>
+                <span class="stat-trend">Claude API & Apify cost</span>
+            </div>
+            <div class="stat-card danger">
+                <span class="stat-label">System Health</span>
+                <span id="stat-health" class="stat-value">—</span>
+                <span id="stat-health-sub" class="stat-trend">Checking run errors</span>
+            </div>
+        </section>
+
+        <!-- Tab Selector -->
+        <nav class="tabs-container">
+            <button id="tab-jobs" class="tab-btn active">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+                Live Jobs Tracker
+            </button>
+            <button id="tab-logs" class="tab-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+                Pipeline Run History
+            </button>
+        </nav>
+
+        <!-- View 1: Job Cards list -->
+        <main id="view-jobs">
+            
+            <!-- Controls Panel -->
+            <section class="controls-card">
+                <div class="controls-row-top">
+                    <!-- Search input -->
+                    <div class="search-wrapper">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input id="search-bar" type="text" placeholder="Search by Job Title, Company, or Location..." class="search-input">
+                    </div>
+                    
+                    <!-- Filters -->
+                    <div class="filters-wrapper">
+                        <select id="filter-tier" class="filter-select">
+                            <option value="">All Tiers</option>
+                            <option value="Tier 1">Tier 1 (Core Data)</option>
+                            <option value="Tier 2">Tier 2 (Broader)</option>
+                        </select>
+                        
+                        <select id="filter-category" class="filter-select">
+                            <option value="">All Categories</option>
+                            <!-- Dynamically loaded -->
+                        </select>
+
+                        <select id="filter-startup" class="filter-select">
+                            <option value="">Startup Status (All)</option>
+                            <option value="Yes">Startups Only</option>
+                            <option value="No">Established Corporates</option>
+                        </select>
+
+                        <select id="sort-by" class="filter-select">
+                            <option value="score-desc">Highest Score first</option>
+                            <option value="date-desc">Newest postings first</option>
+                            <option value="score-asc">Lowest Score first</option>
+                            <option value="date-asc">Oldest postings first</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="controls-row-bottom">
+                    <div class="slider-group">
+                        <label for="filter-score-range">Min Overall Score:</label>
+                        <input type="range" id="filter-score-range" min="0" max="10" step="0.5" value="0" class="range-slider">
+                        <span id="score-slider-val" style="font-weight: 600; color: white;">0.0</span>
+                    </div>
+
+                    <div id="active-pills" class="active-filters">
+                        <!-- pills added dynamically -->
+                    </div>
+                    
+                    <div id="results-count">Showing 0 jobs</div>
+                </div>
+            </section>
+
+            <!-- Cards Container -->
+            <section id="jobs-container" class="jobs-grid">
+                <!-- Loaded dynamically -->
+            </section>
+        </main>
+
+        <!-- View 2: Run Logs table -->
+        <main id="view-logs" class="hidden">
+            <section class="logs-panel">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Timestamp (UTC)</th>
+                            <th>Scraped</th>
+                            <th>New Jobs</th>
+                            <th>Stage A Scored</th>
+                            <th>Stage B Scored</th>
+                            <th>Resumes Gen</th>
+                            <th>Reach Roles</th>
+                            <th>Archived</th>
+                            <th>Cost (USD)</th>
+                            <th>Budget Warning</th>
+                            <th>Errors</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </section>
+        </main>
+
+    </div>
+
+    <!-- Library: PapaParse for robust CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- JS Logic -->
+    <script>
+        // ─────────────────────────────────────────────────────────────────────────────
+        // CONFIGURATION: REPLACE THESE URLS WITH YOUR PUBLISHED CSV LINKS
+        // ─────────────────────────────────────────────────────────────────────────────
+        const JOB_TRACKER_CSV_URL = 'PLACEHOLDER_JOB_TRACKER_CSV_URL';
+        const RUN_LOG_CSV_URL = 'PLACEHOLDER_RUN_LOG_CSV_URL';
+        
+        // State variables
+        let rawJobs = [];
+        let rawLogs = [];
+        let parsedJobs = [];
+        let parsedLogs = [];
+        let isDemoMode = false;
+
+        // Initialize elements
+        const onboardingFlow = document.getElementById('onboarding-flow');
+        const loadDemoBtn = document.getElementById('load-demo-btn');
+        const tabJobs = document.getElementById('tab-jobs');
+        const tabLogs = document.getElementById('tab-logs');
+        const viewJobs = document.getElementById('view-jobs');
+        const viewLogs = document.getElementById('view-logs');
+        const jobsContainer = document.getElementById('jobs-container');
+        const logsTbody = document.getElementById('logs-tbody');
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionDot = document.getElementById('connection-dot');
+        const connectionText = document.getElementById('connection-text');
+
+        // Control elements
+        const searchBar = document.getElementById('search-bar');
+        const filterTier = document.getElementById('filter-tier');
+        const filterCategory = document.getElementById('filter-category');
+        const filterStartup = document.getElementById('filter-startup');
+        const filterScoreRange = document.getElementById('filter-score-range');
+        const scoreSliderVal = document.getElementById('score-slider-val');
+        const sortBy = document.getElementById('sort-by');
+        const resultsCount = document.getElementById('results-count');
+        const activePills = document.getElementById('active-pills');
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 1. Column Normalizer & Mapper
+        // ─────────────────────────────────────────────────────────────────────────────
+        function mapJobRow(row) {
+            const findKey = (candidates) => {
+                for (const c of candidates) {
+                    const key = Object.keys(row).find(k => k.trim().toLowerCase() === c.trim().toLowerCase());
+                    if (key) return row[key];
+                }
+                return '';
+            };
+
+            return {
+                id: findKey(['#', 'row', 'id', 'job_id']),
+                jobId: findKey(['job_id', 'jobId']),
+                category: findKey(['Category', 'category']),
+                roleTier: findKey(['Role Tier', 'role_tier', 'Tier']),
+                title: findKey(['Job Title', 'Title', 'job_title']),
+                company: findKey(['Company', 'company']),
+                location: findKey(['Location', 'location']),
+                postedDate: findKey(['Posted Date', 'posted_date', 'date']),
+                daysOld: parseInt(findKey(['Days Old', 'days_old', 'days']), 10) || 0,
+                recencyBucket: findKey(['Recency Bucket', 'recency_bucket']),
+                expRequired: findKey(['Exp. Required', 'experience_required', 'Experience Required', 'Exp Required']),
+                expGate: findKey(['Exp. Gate', 'experience_gate', 'Exp Gate']),
+                startup: findKey(['Startup?', 'startup', 'is_startup']),
+                pay: findKey(['Pay', 'salary', 'salary_text']),
+                currency: findKey(['Currency', 'salary_currency', 'currency']),
+                skillMatch: parseFloat(findKey(['Skill Match', 'skill_match_score', 'skill_match'])) || 0,
+                expFit: parseFloat(findKey(['Experience Fit', 'experience_fit_score', 'experience_fit'])) || 0,
+                compFit: parseFloat(findKey(['Comp Fit', 'comp_fit_score', 'comp_fit'])) || 0,
+                recencyBonus: parseFloat(findKey(['Recency Bonus', 'recency_bonus'])) || 0,
+                regionBonus: parseFloat(findKey(['Region Bonus', 'region_bonus'])) || 0,
+                stageAScore: parseFloat(findKey(['Stage A Score', 'stage_a_score'])) || 0,
+                stageBScore: parseFloat(findKey(['Stage B Score', 'stage_b_refined_score', 'stage_b_score'])) || 0,
+                overallScore: parseFloat(findKey(['Overall Score', 'Score', 'overall_score'])) || 0,
+                applyLink: findKey(['Apply Link', 'url', 'apply_link', 'applyLink']),
+                resumeLink: findKey(['Resume Link', 'resume_link', 'resumeLink']),
+                validation: findKey(['Validation', 'validation_status', 'validation']),
+                fitNote: findKey(['Fit Note', 'fit_note']),
+                redFlags: findKey(['Red Flags', 'red_flags']),
+                source: findKey(['Source', 'source']),
+                firstSeen: findKey(['First Seen', 'first_seen_date', 'first_seen']),
+            };
+        }
+
+        function mapLogRow(row) {
+            const findKey = (candidates) => {
+                for (const c of candidates) {
+                    const key = Object.keys(row).find(k => k.trim().toLowerCase() === c.trim().toLowerCase());
+                    if (key) return row[key];
+                }
+                return '';
+            };
+
+            return {
+                runDate: findKey(['run_date', 'date', 'runDate']),
+                runTimestamp: findKey(['run_timestamp', 'timestamp', 'runTimestamp']),
+                jobsScraped: parseInt(findKey(['jobs_scraped', 'scraped', 'jobsScraped']), 10) || 0,
+                jobsNew: parseInt(findKey(['jobs_new', 'new', 'jobsNew']), 10) || 0,
+                jobsScoredStageA: parseInt(findKey(['jobs_scored_stage_a', 'stage_a', 'jobsScoredStageA']), 10) || 0,
+                jobsScoredStageB: parseInt(findKey(['jobs_scored_stage_b', 'stage_b', 'jobsScoredStageB']), 10) || 0,
+                resumesGenerated: parseInt(findKey(['resumes_generated', 'resumes', 'resumesGenerated']), 10) || 0,
+                reachRolesAdded: parseInt(findKey(['reach_roles_added', 'reach', 'reachRolesAdded']), 10) || 0,
+                archived: parseInt(findKey(['archived', 'archive', 'archivedCount']), 10) || 0,
+                spendUsd: parseFloat(findKey(['spend_usd', 'spend', 'spendUsd'])) || 0.0,
+                budgetDegraded: findKey(['budget_degraded', 'degraded', 'budgetDegraded']),
+                errors: findKey(['errors', 'error', 'errorMessage']),
+                notes: findKey(['notes', 'note'])
+            };
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 2. Navigation Control
+        // ─────────────────────────────────────────────────────────────────────────────
+        tabJobs.addEventListener('click', () => {
+            tabJobs.classList.add('active');
+            tabLogs.classList.remove('active');
+            viewJobs.classList.remove('hidden');
+            viewLogs.classList.add('hidden');
+        });
+
+        tabLogs.addEventListener('click', () => {
+            tabLogs.classList.add('active');
+            tabJobs.classList.remove('active');
+            viewLogs.classList.remove('hidden');
+            viewJobs.classList.add('hidden');
+        });
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 3. Demo Mock Data Definition
+        // ─────────────────────────────────────────────────────────────────────────────
+        const DEMO_JOBS = [
+            {
+                "Category": "ML/AI Engineer",
+                "Role Tier": "Tier 1",
+                "Job Title": "Generative AI Engineer (Gemma fine-tuning)",
+                "Company": "NeuroEngage Technologies",
+                "Location": "Remote (India)",
+                "Posted Date": "2026-08-18",
+                "Days Old": "1",
+                "Exp. Required": "1-2 Years",
+                "Startup?": "Yes",
+                "Pay": "₹16,000,000",
+                "Currency": "INR",
+                "Skill Match": "9.5",
+                "Experience Fit": "9.0",
+                "Comp Fit": "8.5",
+                "Recency Bonus": "2.0",
+                "Region Bonus": "0.75",
+                "Stage A Score": "8.8",
+                "Stage B Score": "9.2",
+                "Overall Score": "9.2",
+                "Apply Link": "https://example.com/apply/gemma-eng",
+                "Resume Link": "https://docs.google.com/document/d/demo1/edit",
+                "Validation": "✅ Live on Careers page",
+                "Fit Note": "Candidate has excellent overlap with Gemma, prompt engineering, and LLM fine-tuning weights listed in profiles. Location bonus applied.",
+                "Red Flags": "None",
+                "Source": "Indeed"
+            },
+            {
+                "Category": "Data Scientist",
+                "Role Tier": "Tier 1",
+                "Job Title": "Junior Data Scientist (NLP & Spark)",
+                "Company": "Reliance Jio",
+                "Location": "Mumbai, MH",
+                "Posted Date": "2026-08-19",
+                "Days Old": "0",
+                "Exp. Required": "0-1 Years",
+                "Startup?": "No",
+                "Pay": "₹1,200,000",
+                "Currency": "INR",
+                "Skill Match": "8.0",
+                "Experience Fit": "10.0",
+                "Comp Fit": "7.5",
+                "Recency Bonus": "2.0",
+                "Region Bonus": "1.5",
+                "Stage A Score": "8.2",
+                "Stage B Score": "8.5",
+                "Overall Score": "8.5",
+                "Apply Link": "https://example.com/apply/jio-ds",
+                "Resume Link": "https://docs.google.com/document/d/demo2/edit",
+                "Validation": "✅ Live on Careers page",
+                "Fit Note": "Jio local hiring in Mumbai. 1.5 region score bonus boosted this role significantly. Excellent CDAC BDA-aligned match.",
+                "Red Flags": "Traditional corporate structure may require rigid reporting hours.",
+                "Source": "Naukri"
+            },
+            {
+                "Category": "Data Analyst",
+                "Role Tier": "Tier 1",
+                "Job Title": "Product Data Analyst",
+                "Company": "Stripe",
+                "Location": "Remote (US/Global)",
+                "Posted Date": "2026-08-15",
+                "Days Old": "4",
+                "Exp. Required": "1-3 Years",
+                "Startup?": "No",
+                "Pay": "$90,000",
+                "Currency": "USD",
+                "Skill Match": "7.8",
+                "Experience Fit": "8.0",
+                "Comp Fit": "9.5",
+                "Recency Bonus": "1.5",
+                "Region Bonus": "0",
+                "Stage A Score": "7.9",
+                "Stage B Score": "8.1",
+                "Overall Score": "8.1",
+                "Apply Link": "https://example.com/apply/stripe-analyst",
+                "Resume Link": "",
+                "Validation": "⚠️ Possibly Stale",
+                "Fit Note": "Global remote role paying highly in USD, passing compensation filter. Recency is slightly lowered (4 days).",
+                "Red Flags": "Career site returned 404 validation warning, posting may have closed.",
+                "Source": "Linkedin"
+            },
+            {
+                "Category": "Product Associate",
+                "Role Tier": "Tier 2",
+                "Job Title": "AI Growth Associate",
+                "Company": "Perplexity AI",
+                "Location": "Remote (US)",
+                "Posted Date": "2026-08-16",
+                "Days Old": "3",
+                "Exp. Required": "0-2 Years",
+                "Startup?": "Yes",
+                "Pay": "$75,000",
+                "Currency": "USD",
+                "Skill Match": "6.8",
+                "Experience Fit": "9.0",
+                "Comp Fit": "8.0",
+                "Recency Bonus": "2.0",
+                "Region Bonus": "0",
+                "Stage A Score": "6.5",
+                "Stage B Score": "6.8",
+                "Overall Score": "6.8",
+                "Apply Link": "https://example.com/apply/perplexity-growth",
+                "Resume Link": "",
+                "Validation": "✅ Live on Careers page",
+                "Fit Note": "Tier 2 role flags a minor skill penalty (-0.5). High compensation fits criteria well. Highly strategic founder-adjacent role.",
+                "Red Flags": "High work pressure environment reported.",
+                "Source": "Indeed"
+            },
+            {
+                "Category": "Business Analyst",
+                "Role Tier": "Tier 2",
+                "Job Title": "Business Operations Analyst",
+                "Company": "TCS",
+                "Location": "Mumbai, India",
+                "Posted Date": "2026-08-11",
+                "Days Old": "8",
+                "Exp. Required": "2+ Years",
+                "Startup?": "No",
+                "Pay": "₹650,000",
+                "Currency": "INR",
+                "Skill Match": "6.0",
+                "Experience Fit": "6.5",
+                "Comp Fit": "5.0",
+                "Recency Bonus": "0.75",
+                "Region Bonus": "1.0",
+                "Stage A Score": "5.2",
+                "Stage B Score": "",
+                "Overall Score": "5.2",
+                "Apply Link": "https://example.com/apply/tcs-bizops",
+                "Resume Link": "",
+                "Validation": "✅ Live on Careers page",
+                "Fit Note": "Local Mumbai role, but falls into Tier 2. Recency bonus is minimal. Stage B skipped due to low Stage A score (<6.0).",
+                "Red Flags": "Low compensation package below Mumbai floor recommendation.",
+                "Source": "Naukri"
+            }
+        ];
+
+        const DEMO_LOGS = [
+            {
+                "run_date": "2026-08-19",
+                "run_timestamp": "2026-08-19 07:30:15",
+                "jobs_scraped": "145",
+                "jobs_new": "12",
+                "jobs_scored_stage_a": "12",
+                "jobs_scored_stage_b": "4",
+                "resumes_generated": "2",
+                "reach_roles_added": "1",
+                "archived": "3",
+                "spend_usd": "0.0825",
+                "budget_degraded": "No",
+                "errors": "",
+                "notes": "Apify and JobSpy pipelines completed in 4.5m."
+            },
+            {
+                "run_date": "2026-08-18",
+                "run_timestamp": "2026-08-18 07:31:02",
+                "jobs_scraped": "138",
+                "jobs_new": "18",
+                "jobs_scored_stage_a": "18",
+                "jobs_scored_stage_b": "6",
+                "resumes_generated": "3",
+                "reach_roles_added": "0",
+                "archived": "2",
+                "spend_usd": "0.1415",
+                "budget_degraded": "No",
+                "errors": "",
+                "notes": "Apify Linkedin scraper experienced slight rate limit, auto-recovered."
+            },
+            {
+                "run_date": "2026-08-17",
+                "run_timestamp": "2026-08-17 07:30:45",
+                "jobs_scraped": "152",
+                "jobs_new": "15",
+                "jobs_scored_stage_a": "15",
+                "jobs_scored_stage_b": "5",
+                "resumes_generated": "1",
+                "reach_roles_added": "2",
+                "archived": "0",
+                "spend_usd": "0.0910",
+                "budget_degraded": "No",
+                "errors": "Naukri Scraper timed out",
+                "notes": "Partial scraper failures logged. Naukri search skipped this cycle."
+            }
+        ];
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 4. Data Initialization & Loading Flow
+        // ─────────────────────────────────────────────────────────────────────────────
+        
+        function initApp() {
+            // Check if placeholders are replaced
+            const isTrackerConfigured = JOB_TRACKER_CSV_URL && !JOB_TRACKER_CSV_URL.includes('PLACEHOLDER');
+            const isLogConfigured = RUN_LOG_CSV_URL && !RUN_LOG_CSV_URL.includes('PLACEHOLDER');
+
+            if (isTrackerConfigured && isLogConfigured) {
+                // Remove onboarding flow
+                onboardingFlow.classList.add('hidden');
+                
+                // Set connection state
+                connectionDot.className = 'pulse-dot';
+                connectionText.textContent = 'Live Sheet Syncing';
+                
+                // Fetch real sheets data
+                fetchSheetsData();
+            } else {
+                // Show onboarding and attach demo trigger
+                onboardingFlow.classList.remove('hidden');
+                loadDemoBtn.addEventListener('click', loadDemoData);
+            }
+        }
+
+        function loadDemoData() {
+            isDemoMode = true;
+            onboardingFlow.classList.add('hidden');
+            
+            connectionDot.className = 'pulse-dot';
+            connectionText.textContent = 'Demo Mode Active';
+            connectionStatus.style.borderColor = 'hsl(var(--primary) / 0.5)';
+            
+            rawJobs = DEMO_JOBS;
+            rawLogs = DEMO_LOGS;
+            
+            processAndRender();
+        }
+
+        async function fetchSheetsData() {
+            try {
+                connectionText.textContent = 'Syncing...';
+                
+                const [jobsRes, logsRes] = await Promise.all([
+                    fetch(JOB_TRACKER_CSV_URL),
+                    fetch(RUN_LOG_CSV_URL)
+                ]);
+
+                if (!jobsRes.ok || !logsRes.ok) {
+                    throw new Error('Google Sheet request failed. Check publish URLs.');
+                }
+
+                const jobsCSV = await jobsRes.text();
+                const logsCSV = await logsRes.text();
+
+                // Parse with PapaParse
+                Papa.parse(jobsCSV, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        rawJobs = results.data;
+                        
+                        Papa.parse(logsCSV, {
+                            header: true,
+                            skipEmptyLines: true,
+                            complete: function(logResults) {
+                                rawLogs = logResults.data;
+                                processAndRender();
+                            }
+                        });
+                    },
+                    error: function(err) {
+                        throw new Error('Job tracker CSV parse error: ' + err.message);
+                    }
+                });
+
+            } catch (error) {
+                console.error(error);
+                connectionDot.className = 'pulse-dot warning';
+                connectionText.textContent = 'Sync Error';
+                alert('Could not pull live sheet data. Showing onboarding guidelines.\n\nError: ' + error.message);
+                onboardingFlow.classList.remove('hidden');
+            }
+        }
+
+        function processAndRender() {
+            parsedJobs = rawJobs.map(mapJobRow).filter(j => j.title && j.company);
+            parsedLogs = rawLogs.map(mapLogRow).filter(l => l.runDate);
+
+            // Populate Category Filter dropdown dynamically
+            populateCategoryFilter();
+            
+            // Set stats summary KPI
+            calculateStats();
+
+            // Render views
+            renderJobsGrid();
+            renderLogsTable();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 5. Calculate Metrics (KPIs)
+        // ─────────────────────────────────────────────────────────────────────────────
+        function calculateStats() {
+            // Stat 1: Total Scraped
+            let totalScraped = 0;
+            if (parsedLogs.length > 0) {
+                totalScraped = parsedLogs.reduce((acc, log) => acc + log.jobsScraped, 0);
+            } else {
+                totalScraped = parsedJobs.length; // fallback
+            }
+            document.getElementById('stat-scraped').textContent = totalScraped;
+
+            // Stat 2: Active Pipeline
+            document.getElementById('stat-pipeline').textContent = parsedJobs.length;
+
+            // Stat 3: Avg Score
+            let validScores = parsedJobs.map(j => j.overallScore).filter(s => s > 0);
+            let avgScore = 0;
+            if (validScores.length > 0) {
+                avgScore = validScores.reduce((acc, s) => acc + s, 0) / validScores.length;
+            }
+            document.getElementById('stat-avg-score').textContent = avgScore.toFixed(1);
+
+            // Stat 4: Spend Tracker
+            let totalSpend = 0;
+            let resumesCountVal = 0;
+            if (parsedLogs.length > 0) {
+                totalSpend = parsedLogs.reduce((acc, log) => acc + log.spendUsd, 0);
+                resumesCountVal = parsedLogs.reduce((acc, log) => acc + log.resumesGenerated, 0);
+            }
+            document.getElementById('stat-spend').textContent = '$' + totalSpend.toFixed(2);
+            document.getElementById('stat-spend').nextElementSibling.textContent = `${resumesCountVal} Resumes Prepared`;
+
+            // Stat 5: System Health
+            let hasErrors = false;
+            let lastErrorMsg = '';
+            if (parsedLogs.length > 0) {
+                // Look at the latest run logs for errors
+                const latestRuns = parsedLogs.slice(0, 3);
+                const runsWithErrors = latestRuns.filter(r => r.errors && r.errors.trim().length > 0);
+                hasErrors = runsWithErrors.length > 0;
+                if (hasErrors) {
+                    lastErrorMsg = runsWithErrors[0].errors;
+                }
+            }
+
+            const healthVal = document.getElementById('stat-health');
+            const healthSub = document.getElementById('stat-health-sub');
+            if (hasErrors) {
+                healthVal.textContent = 'Degraded';
+                healthVal.style.color = 'hsl(var(--danger))';
+                healthSub.textContent = 'Warning: ' + lastErrorMsg;
+                healthSub.style.color = 'hsl(var(--danger) / 0.8)';
+            } else {
+                healthVal.textContent = 'Healthy';
+                healthVal.style.color = 'hsl(var(--success))';
+                healthSub.textContent = 'All agents fully active';
+                healthSub.style.color = 'hsl(var(--text-muted))';
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 6. Category Filter Loading
+        // ─────────────────────────────────────────────────────────────────────────────
+        function populateCategoryFilter() {
+            const categories = [...new Set(parsedJobs.map(j => j.category).filter(c => c && c.trim().length > 0))];
+            
+            // Clear but keep first option
+            filterCategory.innerHTML = '<option value="">All Categories</option>';
+            
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                filterCategory.appendChild(opt);
+            });
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 7. Filtering & Sorting Logic
+        // ─────────────────────────────────────────────────────────────────────────────
+        function getFilteredJobs() {
+            const query = searchBar.value.trim().toLowerCase();
+            const tierVal = filterTier.value;
+            const catVal = filterCategory.value;
+            const startupVal = filterStartup.value;
+            const minScore = parseFloat(filterScoreRange.value) || 0;
+
+            let filtered = parsedJobs.filter(job => {
+                // Search query
+                const searchMatch = !query || 
+                    job.title.toLowerCase().includes(query) ||
+                    job.company.toLowerCase().includes(query) ||
+                    job.location.toLowerCase().includes(query);
+                
+                // Tier filter
+                const tierMatch = !tierVal || job.roleTier === tierVal;
+                
+                // Category filter
+                const catMatch = !catVal || job.category === catVal;
+
+                // Startup status
+                let startupMatch = true;
+                if (startupVal === 'Yes') {
+                    startupMatch = job.startup.toLowerCase() === 'yes';
+                } else if (startupVal === 'No') {
+                    startupMatch = job.startup.toLowerCase() === 'no';
+                }
+
+                // Overall score
+                const scoreMatch = job.overallScore >= minScore;
+
+                return searchMatch && tierMatch && catMatch && startupMatch && scoreMatch;
+            });
+
+            // Sorting
+            const sortVal = sortBy.value;
+            filtered.sort((a, b) => {
+                if (sortVal === 'score-desc') {
+                    return b.overallScore - a.overallScore;
+                } else if (sortVal === 'score-asc') {
+                    return a.overallScore - b.overallScore;
+                } else if (sortVal === 'date-desc') {
+                    return a.daysOld - b.daysOld;
+                } else if (sortVal === 'date-asc') {
+                    return b.daysOld - a.daysOld;
+                }
+                return 0;
+            });
+
+            return filtered;
+        }
+
+        // Render job cards
+        function renderJobsGrid() {
+            const jobs = getFilteredJobs();
+            resultsCount.textContent = `Showing ${jobs.length} jobs`;
+            updateFilterPills();
+
+            if (jobs.length === 0) {
+                jobsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                        </svg>
+                        <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">No Matching Jobs Found</p>
+                        <p style="font-size: 0.85rem;">Try relaxing your filters or searching for something else.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            jobsContainer.innerHTML = '';
+            
+            jobs.forEach(job => {
+                // Build Card
+                const card = document.createElement('article');
+                card.className = 'job-card';
+                
+                // Color formatting for overall score
+                let scoreClass = 'low';
+                if (job.overallScore >= 7.5) scoreClass = 'high';
+                else if (job.overallScore >= 5.0) scoreClass = 'medium';
+
+                // Badges HTML
+                let badgesHTML = '';
+                if (job.roleTier) {
+                    const tierClass = job.roleTier.toLowerCase().includes('1') ? 'badge-tier1' : 'badge-tier2';
+                    badgesHTML += `<span class="badge ${tierClass}">${job.roleTier}</span>`;
+                }
+                if (job.startup.toLowerCase() === 'yes') {
+                    badgesHTML += `<span class="badge badge-startup">Startup</span>`;
+                }
+                if (job.daysOld <= 3) {
+                    badgesHTML += `<span class="badge badge-recency">New</span>`;
+                }
+                if (job.validation && job.validation.toLowerCase().includes('stale')) {
+                    badgesHTML += `<span class="badge badge-stale">⚠️ Stale</span>`;
+                }
+
+                // Salary / Pay string mapping
+                const payString = job.pay ? `${job.pay} ${job.currency || ''}` : 'Not Specified';
+
+                // Action buttons: Check if resume docx link is generated
+                const hasResume = job.resumeLink && job.resumeLink.trim().length > 0;
+                const resumeAttr = hasResume ? `href="${job.resumeLink}" target="_blank"` : 'disabled';
+                const resumeClass = hasResume ? 'btn-action-secondary' : 'btn-action-secondary';
+
+                card.innerHTML = `
+                    <div class="job-card-header">
+                        <div class="job-title-company">
+                            <h3>${job.title}</h3>
+                            <div class="job-company">${job.company}</div>
+                        </div>
+                        <div class="score-badge">
+                            <span class="score-value ${scoreClass}">${job.overallScore.toFixed(1)}</span>
+                            <span class="score-label">Score</span>
+                        </div>
+                    </div>
+
+                    <div class="badge-list">
+                        ${badgesHTML}
+                    </div>
+
+                    <div class="meta-list">
+                        <div class="meta-item">
+                            <!-- Location Pin icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <span>${job.location || 'Remote'}</span>
+                        </div>
+                        <div class="meta-item">
+                            <!-- Briefcase icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                            <span>${job.expRequired || '0-1 Yr (Entry)'}</span>
+                        </div>
+                        <div class="meta-item">
+                            <!-- Currency icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16v1m-6-6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${payString}</span>
+                        </div>
+                        <div class="meta-item">
+                            <!-- Clock icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>${job.daysOld === 0 ? 'Today' : `${job.daysOld}d ago`}</span>
+                        </div>
+                    </div>
+
+                    <div class="match-bars-container">
+                        <div class="match-bar-item">
+                            <span class="match-bar-label">Skill Match</span>
+                            <div class="match-bar-track">
+                                <div class="match-bar-fill" style="width: ${Math.min(job.skillMatch * 10, 100)}%;"></div>
+                            </div>
+                            <span class="match-bar-value">${job.skillMatch.toFixed(1)}</span>
+                        </div>
+                        <div class="match-bar-item">
+                            <span class="match-bar-label">Experience</span>
+                            <div class="match-bar-track">
+                                <div class="match-bar-fill" style="width: ${Math.min(job.expFit * 10, 100)}%;"></div>
+                            </div>
+                            <span class="match-bar-value">${job.expFit.toFixed(1)}</span>
+                        </div>
+                        <div class="match-bar-item">
+                            <span class="match-bar-label">Comp Fit</span>
+                            <div class="match-bar-track">
+                                <div class="match-bar-fill" style="width: ${Math.min(job.compFit * 10, 100)}%;"></div>
+                            </div>
+                            <span class="match-bar-value">${job.compFit.toFixed(1)}</span>
+                        </div>
+                    </div>
+
+                    <div class="job-card-actions">
+                        <a href="${job.applyLink}" target="_blank" class="btn-action btn-action-primary">
+                            <!-- Link External icon -->
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                            Apply Link
+                        </a>
+                        <a ${resumeAttr} class="btn-action ${resumeClass}">
+                            <!-- Document icon -->
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            View Resume
+                        </a>
+                    </div>
+
+                    <button class="expandable-trigger" onclick="toggleAnalysis(this)">
+                        <span>View AI Fit Analysis</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+
+                    <div class="expandable-content">
+                        <div class="analysis-note-box">
+                            <div class="analysis-note-title">Pipeline Fit Note</div>
+                            <p>${job.fitNote || 'No fit analysis details provided.'}</p>
+                        </div>
+                        ${job.redFlags && job.redFlags.toLowerCase() !== 'none' ? `
+                            <div class="analysis-flags-box">
+                                <div class="analysis-flags-title">Identified Risk Flags</div>
+                                <p>${job.redFlags}</p>
+                            </div>
+                        ` : ''}
+                        <div style="font-size: 0.7rem; color: hsl(var(--text-muted)); text-align: right; margin-top: 0.2rem;">
+                            Source agent: ${job.source || 'Aggregated'}
+                        </div>
+                    </div>
+                `;
+
+                jobsContainer.appendChild(card);
+            });
+        }
+
+        // Toggle Expandable AI Analysis panel
+        window.toggleAnalysis = function(btn) {
+            const content = btn.nextElementSibling;
+            btn.classList.toggle('expanded');
+            content.classList.toggle('show');
+            
+            const btnText = btn.querySelector('span');
+            if (content.classList.contains('show')) {
+                btnText.textContent = 'Hide AI Fit Analysis';
+            } else {
+                btnText.textContent = 'View AI Fit Analysis';
+            }
+        };
+
+        // Update active filter pills below controls
+        function updateFilterPills() {
+            activePills.innerHTML = '';
+            
+            const addPill = (label, onClear) => {
+                const pill = document.createElement('span');
+                pill.className = 'filter-pill';
+                pill.innerHTML = `
+                    <span>${label}</span>
+                    <button onclick="${onClear}">&times;</button>
+                `;
+                activePills.appendChild(pill);
+            };
+
+            if (searchBar.value) {
+                addPill(`Search: "${searchBar.value}"`, `clearSearch()`);
+            }
+            if (filterTier.value) {
+                addPill(`Tier: ${filterTier.value}`, `clearTier()`);
+            }
+            if (filterCategory.value) {
+                addPill(`Category: ${filterCategory.value}`, `clearCategory()`);
+            }
+            if (filterStartup.value) {
+                const text = filterStartup.value === 'Yes' ? 'Startups' : 'Corporates';
+                addPill(text, `clearStartup()`);
+            }
+            if (parseFloat(filterScoreRange.value) > 0) {
+                addPill(`Score: >= ${filterScoreRange.value}`, `clearScore()`);
+            }
+        }
+
+        // Global callback functions to clear filters
+        window.clearSearch = () => { searchBar.value = ''; renderJobsGrid(); };
+        window.clearTier = () => { filterTier.value = ''; renderJobsGrid(); };
+        window.clearCategory = () => { filterCategory.value = ''; renderJobsGrid(); };
+        window.clearStartup = () => { filterStartup.value = ''; renderJobsGrid(); };
+        window.clearScore = () => { 
+            filterScoreRange.value = 0; 
+            scoreSliderVal.textContent = '0.0'; 
+            renderJobsGrid(); 
+        };
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 8. Run Logs Grid view
+        // ─────────────────────────────────────────────────────────────────────────────
+        function renderLogsTable() {
+            if (parsedLogs.length === 0) {
+                logsTbody.innerHTML = `
+                    <tr>
+                        <td colspan="12" style="text-align: center; color: hsl(var(--text-muted)); padding: 3rem;">
+                            No runs recorded in Google Sheets yet.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            // Sort logs by date descending (latest run first)
+            parsedLogs.sort((a, b) => {
+                return new Date(b.runDate) - new Date(a.runDate);
+            });
+
+            logsTbody.innerHTML = '';
+            
+            parsedLogs.forEach(log => {
+                const tr = document.createElement('tr');
+                
+                const errorClass = log.errors && log.errors.trim().length > 0 ? 'error-log-cell has-error' : 'error-log-cell';
+                const errorText = log.errors && log.errors.trim().length > 0 ? `⚠️ ${log.errors}` : 'None';
+                const warningBadge = log.budgetDegraded && log.budgetDegraded.toLowerCase() === 'yes' ? 
+                    `<span style="color: hsl(var(--warning)); font-weight: 600;">Yes</span>` : 'No';
+
+                tr.innerHTML = `
+                    <td style="font-weight: 600; white-space: nowrap;">${log.runDate}</td>
+                    <td style="font-family: monospace; color: hsl(var(--text-muted));">${log.runTimestamp || '—'}</td>
+                    <td style="text-align: center; font-weight: 500;">${log.jobsScraped}</td>
+                    <td style="text-align: center; color: hsl(var(--success)); font-weight: 600;">${log.jobsNew}</td>
+                    <td style="text-align: center;">${log.jobsScoredStageA}</td>
+                    <td style="text-align: center;">${log.jobsScoredStageB}</td>
+                    <td style="text-align: center; font-weight: 500;">${log.resumesGenerated}</td>
+                    <td style="text-align: center;">${log.reachRolesAdded}</td>
+                    <td style="text-align: center; color: hsl(var(--text-muted));">${log.archived}</td>
+                    <td style="font-family: monospace; font-weight: 600;">$${log.spendUsd.toFixed(4)}</td>
+                    <td style="text-align: center;">${warningBadge}</td>
+                    <td class="${errorClass}" title="${log.errors || ''}">${errorText}</td>
+                `;
+
+                logsTbody.appendChild(tr);
+            });
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 9. Event Listeners
+        // ─────────────────────────────────────────────────────────────────────────────
+        searchBar.addEventListener('input', renderJobsGrid);
+        filterTier.addEventListener('change', renderJobsGrid);
+        filterCategory.addEventListener('change', renderJobsGrid);
+        filterStartup.addEventListener('change', renderJobsGrid);
+        sortBy.addEventListener('change', renderJobsGrid);
+        
+        filterScoreRange.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            scoreSliderVal.textContent = val.toFixed(1);
+            renderJobsGrid();
+        });
+
+        // Bootstrap App
+        window.addEventListener('DOMContentLoaded', initApp);
+
+    </script>
+</body>
+</html>
