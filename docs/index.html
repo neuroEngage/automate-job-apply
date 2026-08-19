@@ -1211,8 +1211,8 @@
         // ─────────────────────────────────────────────────────────────────────────────
         // CONFIGURATION: REPLACE THESE URLS WITH YOUR PUBLISHED CSV LINKS
         // ─────────────────────────────────────────────────────────────────────────────
-        const JOB_TRACKER_CSV_URL = 'PLACEHOLDER_JOB_TRACKER_CSV_URL';
-        const RUN_LOG_CSV_URL = 'PLACEHOLDER_RUN_LOG_CSV_URL';
+        const JOB_TRACKER_CSV_URL = 'https://docs.google.com/spreadsheets/d/12j2JK1_HhABKNT70PPAuOgjakt5qQJNyQRmZglbJCwc/export?format=csv&gid=1507120654';
+        const RUN_LOG_CSV_URL = 'https://docs.google.com/spreadsheets/d/12j2JK1_HhABKNT70PPAuOgjakt5qQJNyQRmZglbJCwc/export?format=csv&gid=1256337166';
         
         // State variables
         let rawJobs = [];
@@ -1284,7 +1284,7 @@
                 applyLink: findKey(['Apply Link', 'url', 'apply_link', 'applyLink']),
                 resumeLink: findKey(['Resume Link', 'resume_link', 'resumeLink']),
                 validation: findKey(['Validation', 'validation_status', 'validation']),
-                fitNote: findKey(['Fit Note', 'fit_note']),
+                fitNote: findKey(['Fit Note', 'fit_note', 'Reason', 'reason']),
                 redFlags: findKey(['Red Flags', 'red_flags']),
                 source: findKey(['Source', 'source']),
                 firstSeen: findKey(['First Seen', 'first_seen_date', 'first_seen']),
@@ -1806,10 +1806,57 @@
                     badgesHTML += `<span class="badge badge-stale">⚠️ Stale</span>`;
                 }
 
-                // Salary / Pay string mapping
-                const payString = job.pay ? `${job.pay} ${job.currency || ''}` : 'Not Specified';
+                // Meta List Construction (robust to empty/missing fields)
+                let metaHTML = '';
+                if (job.location) {
+                    metaHTML += `
+                        <div class="meta-item">
+                            <!-- Location Pin icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <span>${job.location}</span>
+                        </div>`;
+                }
+                if (job.expRequired) {
+                    metaHTML += `
+                        <div class="meta-item">
+                            <!-- Briefcase icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                            <span>${job.expRequired}</span>
+                        </div>`;
+                }
+                if (job.pay) {
+                    metaHTML += `
+                        <div class="meta-item">
+                            <!-- Currency icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16v1m-6-6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${job.pay} ${job.currency || ''}</span>
+                        </div>`;
+                }
+                const dateText = job.daysOld !== undefined && job.daysOld !== null && !isNaN(job.daysOld) ? 
+                    (job.daysOld === 0 ? 'Today' : `${job.daysOld}d ago`) : (job.postedDate || '');
+                if (dateText) {
+                    metaHTML += `
+                        <div class="meta-item">
+                            <!-- Clock icon -->
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>${dateText}</span>
+                        </div>`;
+                }
 
-                // Action buttons: Check if resume docx link is generated
+                // Check if fit scores are available in the CSV
+                const hasScores = (job.skillMatch > 0 || job.expFit > 0 || job.compFit > 0);
+
+                // Action buttons: Check if apply and resume links exist
+                const hasApply = job.applyLink && job.applyLink.trim().length > 0;
                 const hasResume = job.resumeLink && job.resumeLink.trim().length > 0;
                 const resumeAttr = hasResume ? `href="${job.resumeLink}" target="_blank"` : 'disabled';
                 const resumeClass = hasResume ? 'btn-action-secondary' : 'btn-action-secondary';
@@ -1830,38 +1877,9 @@
                         ${badgesHTML}
                     </div>
 
-                    <div class="meta-list">
-                        <div class="meta-item">
-                            <!-- Location Pin icon -->
-                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <span>${job.location || 'Remote'}</span>
-                        </div>
-                        <div class="meta-item">
-                            <!-- Briefcase icon -->
-                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
-                            <span>${job.expRequired || '0-1 Yr (Entry)'}</span>
-                        </div>
-                        <div class="meta-item">
-                            <!-- Currency icon -->
-                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16v1m-6-6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${payString}</span>
-                        </div>
-                        <div class="meta-item">
-                            <!-- Clock icon -->
-                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span>${job.daysOld === 0 ? 'Today' : `${job.daysOld}d ago`}</span>
-                        </div>
-                    </div>
+                    ${metaHTML ? `<div class="meta-list">${metaHTML}</div>` : ''}
 
+                    ${hasScores ? `
                     <div class="match-bars-container">
                         <div class="match-bar-item">
                             <span class="match-bar-label">Skill Match</span>
@@ -1884,9 +1902,11 @@
                             </div>
                             <span class="match-bar-value">${job.compFit.toFixed(1)}</span>
                         </div>
-                    </div>
+                    </div>` : ''}
 
+                    ${hasApply || hasResume ? `
                     <div class="job-card-actions">
+                        ${hasApply ? `
                         <a href="${job.applyLink}" target="_blank" class="btn-action btn-action-primary">
                             <!-- Link External icon -->
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1895,7 +1915,8 @@
                                 <line x1="10" y1="14" x2="21" y2="3"></line>
                             </svg>
                             Apply Link
-                        </a>
+                        </a>` : ''}
+                        ${hasResume ? `
                         <a ${resumeAttr} class="btn-action ${resumeClass}">
                             <!-- Document icon -->
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1906,8 +1927,8 @@
                                 <polyline points="10 9 9 9 8 9"></polyline>
                             </svg>
                             View Resume
-                        </a>
-                    </div>
+                        </a>` : ''}
+                    </div>` : ''}
 
                     <button class="expandable-trigger" onclick="toggleAnalysis(this)">
                         <span>View AI Fit Analysis</span>
