@@ -56,6 +56,12 @@ from src.validator import validate_jobs
 # ─────────────────────────────────────────────────────────────────────────────
 LOG_FILE = "jobradar_run.log"
 
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
