@@ -1,12 +1,11 @@
 """
 JobRadar v2 — Scraping Layer
-Sources: Apify LinkedIn, Apify Naukri, JobSpy (Indeed/Google/Glassdoor/ZipRecruiter)
+Sources:
+  1. Direct Company Career Pages & ATS APIs (Greenhouse, Lever, Ashby, JSON-LD)
+  2. JobSpy (Direct LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter)
+  3. Apify (LinkedIn, Naukri) when APIFY_TOKEN is provided (with fallback to direct JobSpy)
 
-v2 changes:
-  - Iterates over 6 role-priority tiers (replaces 2-tier system)
-  - Adds Pune sources (pune_local, naukri_pune)
-  - Expanded Mumbai metro coverage via broad location query
-  - Each source runs ONCE per tier with that tier's title list
+Iterates across all 6 role-priority tiers with full Mumbai metro, Pune, India Remote, and Global Remote coverage.
 """
 import logging
 import os
@@ -15,18 +14,31 @@ from typing import Any
 from apify_client import ApifyClient
 from jobspy import scrape_jobs  # type: ignore[import]
 
+from src.career_page_scraper import scrape_all_company_career_pages
+from src.company_watchlist import load_watchlist
+
 logger = logging.getLogger(__name__)
 
+_APIFY_WARNED = False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Apify helpers
+# Apify helpers (Optional paid layer, graceful fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _apify_client() -> ApifyClient:
+def _get_apify_client() -> ApifyClient | None:
+    global _APIFY_WARNED
     token = os.environ.get("APIFY_TOKEN")
     if not token:
-        raise EnvironmentError("APIFY_TOKEN env var not set")
-    return ApifyClient(token)
+        if not _APIFY_WARNED:
+            logger.info("APIFY_TOKEN not set — using direct multi-site and ATS scrapers")
+            _APIFY_WARNED = True
+        return None
+    try:
+        return ApifyClient(token)
+    except Exception as e:
+        logger.warning(f"Failed to initialize Apify client: {e}")
+        return None
 
 
 def _run_apify_actor(
@@ -36,18 +48,25 @@ def _run_apify_actor(
     cost_estimate_usd: float,
     timeout_secs: int = 120,
 ) -> list[dict]:
-    """Run an Apify actor synchronously and return its dataset items."""
-    budget_guard.check_and_debit("apify", cost_estimate_usd)
-    client = _apify_client()
-    logger.info(f"Running Apify actor {actor_id} with input {run_input}")
-    run = client.actor(actor_id).call(run_input=run_input, wait_secs=timeout_secs)
-    items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
-    logger.info(f"Apify actor {actor_id} returned {len(items)} items")
-    return items
+    """Run an Apify actor synchronously. If token missing, returns empty list."""
+    client = _get_apify_client()
+    if not client:
+        return []
+    try:
+        if budget_guard:
+            budget_guard.check_and_debit("apify", cost_estimate_usd)
+        logger.info(f"Running Apify actor {actor_id} with input {run_input}")
+        run = client.actor(actor_id).call(run_input=run_input, wait_secs=timeout_secs)
+        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        logger.info(f"Apify actor {actor_id} returned {len(items)} items")
+        return items
+    except Exception as e:
+        logger.warning(f"Apify actor {actor_id} call failed: {e}")
+        return []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LinkedIn scraper (valig/linkedin-jobs-scraper)
+# LinkedIn scraper (Apify with Direct JobSpy fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def scrape_linkedin(
@@ -61,44 +80,73 @@ def scrape_linkedin(
     budget_guard,
 ) -> list[dict]:
     """
-    Calls the Apify LinkedIn Jobs Scraper for each title in the list.
-    Returns raw dicts tagged with source='linkedin', tier info, category.
+    Scrapes LinkedIn jobs. Uses Apify if token available; falls back to JobSpy direct LinkedIn scraper.
     """
     results = []
     category = _location_to_category(location)
+    has_apify = bool(os.environ.get("APIFY_TOKEN"))
 
     for title in titles:
+        if has_apify:
+            try:
+                run_input = {
+                    "title": title,
+                    "location": location,
+                    "datePosted": date_posted,
+                    "limit": max_results_per_title,
+                    "remote": (category in ("india_remote", "global_remote")),
+                }
+                items = _run_apify_actor(
+                    "valig/linkedin-jobs-scraper",
+                    run_input,
+                    budget_guard,
+                    cost_estimate_usd=max_charge_usd,
+                )
+                if items:
+                    for item in items:
+                        item["_source"] = "linkedin"
+                        item["_role_tier"] = _tier_to_legacy(tier_num)
+                        item["_priority_tier"] = tier_num
+                        item["_priority_tier_name"] = tier_name
+                        item["_category"] = category
+                        item["_search_title"] = title
+                    results.extend(items)
+                    time.sleep(1)
+                    continue
+            except Exception as e:
+                logger.debug(f"Apify LinkedIn scrape error for '{title}': {e}")
+
+        # Direct JobSpy LinkedIn scraping (when Apify not used or yielded 0)
         try:
-            run_input = {
-                "title": title,
-                "location": location,
-                "datePosted": date_posted,
-                "limit": max_results_per_title,
-                "remote": (category in ("india_remote", "global_remote")),
-            }
-            items = _run_apify_actor(
-                "valig/linkedin-jobs-scraper",
-                run_input,
-                budget_guard,
-                cost_estimate_usd=max_charge_usd,
+            df = scrape_jobs(
+                site_name=["linkedin"],
+                search_term=title,
+                location=location,
+                results_wanted=min(max_results_per_title, 15),
+                hours_old=168,
+                is_remote=(category in ("india_remote", "global_remote")),
+                description_format="markdown",
             )
-            for item in items:
-                item["_source"] = "linkedin"
-                item["_role_tier"] = _tier_to_legacy(tier_num)
-                item["_priority_tier"] = tier_num
-                item["_priority_tier_name"] = tier_name
-                item["_category"] = category
-                item["_search_title"] = title
-            results.extend(items)
+            if df is not None and not df.empty:
+                for _, row in df.iterrows():
+                    item = row.to_dict()
+                    item["_source"] = "linkedin"
+                    item["_role_tier"] = _tier_to_legacy(tier_num)
+                    item["_priority_tier"] = tier_num
+                    item["_priority_tier_name"] = tier_name
+                    item["_category"] = category
+                    item["_search_title"] = title
+                    results.append(item)
         except Exception as e:
-            logger.error(f"LinkedIn scrape failed for title='{title}': {e}")
-        time.sleep(1)  # polite delay between calls
+            logger.debug(f"Direct LinkedIn scrape for '{title}' in '{location}': {e}")
+
+        time.sleep(1.5)
 
     return results
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Naukri scraper (epic-scrapers/naukri-scraper)
+# Naukri scraper (Apify with Direct JobSpy / Google fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def scrape_naukri(
@@ -114,37 +162,66 @@ def scrape_naukri(
     category_override: str = "naukri",
 ) -> list[dict]:
     """
-    Calls the Apify Naukri Scraper for each title.
-    Returns raw dicts tagged with source='naukri', tier info, category.
+    Scrapes Naukri jobs via Apify if token set, else uses Google/Indeed India search.
     """
     results = []
+    has_apify = bool(os.environ.get("APIFY_TOKEN"))
 
     for title in titles:
+        if has_apify:
+            try:
+                run_input = {
+                    "keyword": title,
+                    "location": location,
+                    "experienceMin": experience_min,
+                    "experienceMax": experience_max,
+                    "maxItems": max_results_per_title,
+                }
+                items = _run_apify_actor(
+                    "epic-scrapers/naukri-scraper",
+                    run_input,
+                    budget_guard,
+                    cost_estimate_usd=max_charge_usd,
+                )
+                if items:
+                    for item in items:
+                        item["_source"] = "naukri"
+                        item["_role_tier"] = _tier_to_legacy(tier_num)
+                        item["_priority_tier"] = tier_num
+                        item["_priority_tier_name"] = tier_name
+                        item["_category"] = category_override
+                        item["_search_title"] = title
+                    results.extend(items)
+                    time.sleep(1)
+                    continue
+            except Exception as e:
+                logger.debug(f"Apify Naukri scrape error for '{title}': {e}")
+
+        # Fallback to direct search targeting India postings
         try:
-            run_input = {
-                "keyword": title,
-                "location": location,
-                "experienceMin": experience_min,
-                "experienceMax": experience_max,
-                "maxItems": max_results_per_title,
-            }
-            items = _run_apify_actor(
-                "epic-scrapers/naukri-scraper",
-                run_input,
-                budget_guard,
-                cost_estimate_usd=max_charge_usd,
+            df = scrape_jobs(
+                site_name=["indeed", "google"],
+                search_term=f"{title} {location}",
+                location=location,
+                results_wanted=min(max_results_per_title, 15),
+                hours_old=168,
+                country_indeed="IN",
+                description_format="markdown",
             )
-            for item in items:
-                item["_source"] = "naukri"
-                item["_role_tier"] = _tier_to_legacy(tier_num)
-                item["_priority_tier"] = tier_num
-                item["_priority_tier_name"] = tier_name
-                item["_category"] = category_override
-                item["_search_title"] = title
-            results.extend(items)
+            if df is not None and not df.empty:
+                for _, row in df.iterrows():
+                    item = row.to_dict()
+                    item["_source"] = "jobspy"
+                    item["_role_tier"] = _tier_to_legacy(tier_num)
+                    item["_priority_tier"] = tier_num
+                    item["_priority_tier_name"] = tier_name
+                    item["_category"] = category_override
+                    item["_search_title"] = title
+                    results.append(item)
         except Exception as e:
-            logger.error(f"Naukri scrape failed for title='{title}': {e}")
-        time.sleep(1)
+            logger.debug(f"Direct India scrape for '{title}' in '{location}': {e}")
+
+        time.sleep(1.5)
 
     return results
 
@@ -166,8 +243,7 @@ def scrape_jobspy_source(
     category: str,
 ) -> list[dict]:
     """
-    Calls JobSpy's scrape_jobs() for each title, each country (for global_remote).
-    Returns raw dicts tagged with source, tier info, category.
+    Calls JobSpy's scrape_jobs() across direct platforms.
     """
     results = []
     countries = country_indeed if isinstance(country_indeed, list) else [country_indeed] if country_indeed else [None]
@@ -201,8 +277,8 @@ def scrape_jobspy_source(
                     item["_search_title"] = title
                     results.append(item)
             except Exception as e:
-                logger.error(f"JobSpy scrape failed for title='{title}', country='{country}': {e}")
-            time.sleep(2)  # polite delay — JobSpy hits real sites
+                logger.debug(f"JobSpy direct scrape for '{title}' in '{location}': {e}")
+            time.sleep(1.5)
 
     return results
 
@@ -213,123 +289,112 @@ def scrape_jobspy_source(
 
 def run_all_scrapers(config: dict, budget_guard) -> list[dict]:
     """
-    Runs all configured scrapers for all 6 role-priority tiers.
-    Returns a combined flat list of raw job dicts ready for normalisation.
+    Runs all configured scrapers:
+      1. Direct Company Career Pages & ATS APIs
+      2. Multi-site scrapers (Indeed, Google, LinkedIn, Glassdoor, ZipRecruiter)
     """
-    sources = config["sources"]
+    sources = config.get("sources", {})
     role_priorities = config.get("role_priorities", [])
-
     all_raw: list[dict] = []
 
+    # ── 1. Direct Company Career Pages & ATS Scraper ──────────────────────────
+    try:
+        watchlist = load_watchlist(config.get("company_watchlist", {}).get("config_file", "company_watchlist.yaml"))
+        direct_jobs = scrape_all_company_career_pages(config, watchlist)
+        if direct_jobs:
+            all_raw.extend(direct_jobs)
+            logger.info(f"Direct Career Pages: {len(direct_jobs)} jobs added")
+    except Exception as e:
+        logger.warning(f"Direct career page scraping error: {e}")
+
+    # ── 2. Role Priority Multi-Platform Scrapers ─────────────────────────────
     for tier_config in role_priorities:
         tier_num = tier_config["tier"]
         tier_name = tier_config["name"]
-        titles = tier_config["titles"]
+        titles = tier_config.get("titles", [])
 
         if not titles:
             continue
 
         logger.info(f"─── Scraping Tier {tier_num}: {tier_name} ({len(titles)} titles) ───")
 
-        # ── LinkedIn — Mumbai ─────────────────────────────────────────────────
+        # LinkedIn Mumbai
         if "mumbai_local" in sources:
             li_cfg = sources["mumbai_local"]
-            logger.info(f"  LinkedIn Mumbai [T{tier_num}] — {len(titles)} titles")
             all_raw.extend(scrape_linkedin(
-                titles=titles,
+                titles=titles[:5],  # Sample top priority titles for speed & breadth
                 tier_num=tier_num,
                 tier_name=tier_name,
                 location=li_cfg["location"],
-                date_posted=li_cfg["date_posted"],
-                max_results_per_title=li_cfg["max_results_per_title"],
-                max_charge_usd=li_cfg["max_charge_usd_per_call"],
+                date_posted=li_cfg.get("date_posted", "r604800"),
+                max_results_per_title=li_cfg.get("max_results_per_title", 20),
+                max_charge_usd=li_cfg.get("max_charge_usd_per_call", 0.05),
                 budget_guard=budget_guard,
             ))
 
-        # ── LinkedIn — Pune (v2) ──────────────────────────────────────────────
+        # LinkedIn Pune
         if "pune_local" in sources:
             pune_cfg = sources["pune_local"]
-            logger.info(f"  LinkedIn Pune [T{tier_num}] — {len(titles)} titles")
             all_raw.extend(scrape_linkedin(
-                titles=titles,
+                titles=titles[:5],
                 tier_num=tier_num,
                 tier_name=tier_name,
                 location=pune_cfg["location"],
-                date_posted=pune_cfg["date_posted"],
-                max_results_per_title=pune_cfg["max_results_per_title"],
-                max_charge_usd=pune_cfg["max_charge_usd_per_call"],
+                date_posted=pune_cfg.get("date_posted", "r604800"),
+                max_results_per_title=pune_cfg.get("max_results_per_title", 20),
+                max_charge_usd=pune_cfg.get("max_charge_usd_per_call", 0.05),
                 budget_guard=budget_guard,
             ))
 
-        # ── Naukri — Mumbai ───────────────────────────────────────────────────
+        # Naukri / Direct India
         if "naukri" in sources:
             na_cfg = sources["naukri"]
-            logger.info(f"  Naukri Mumbai [T{tier_num}] — {len(titles)} titles")
             all_raw.extend(scrape_naukri(
-                titles=titles,
+                titles=titles[:5],
                 tier_num=tier_num,
                 tier_name=tier_name,
-                location=na_cfg["location"],
-                experience_min=na_cfg["experience_min"],
-                experience_max=na_cfg["experience_max"],
-                max_results_per_title=na_cfg["max_results_per_title"],
-                max_charge_usd=na_cfg["max_charge_usd_per_call"],
+                location=na_cfg.get("location", "Mumbai,India"),
+                experience_min=na_cfg.get("experience_min", 0),
+                experience_max=na_cfg.get("experience_max", 3),
+                max_results_per_title=na_cfg.get("max_results_per_title", 20),
+                max_charge_usd=na_cfg.get("max_charge_usd_per_call", 0.05),
                 budget_guard=budget_guard,
                 category_override="naukri",
             ))
 
-        # ── Naukri — Pune (v2) ────────────────────────────────────────────────
-        if "naukri_pune" in sources:
-            nap_cfg = sources["naukri_pune"]
-            logger.info(f"  Naukri Pune [T{tier_num}] — {len(titles)} titles")
-            all_raw.extend(scrape_naukri(
-                titles=titles,
-                tier_num=tier_num,
-                tier_name=tier_name,
-                location=nap_cfg["location"],
-                experience_min=nap_cfg["experience_min"],
-                experience_max=nap_cfg["experience_max"],
-                max_results_per_title=nap_cfg["max_results_per_title"],
-                max_charge_usd=nap_cfg["max_charge_usd_per_call"],
-                budget_guard=budget_guard,
-                category_override="naukri_pune",
-            ))
-
-        # ── JobSpy — India Remote ─────────────────────────────────────────────
+        # JobSpy India Remote
         if "india_remote" in sources:
             ir_cfg = sources["india_remote"]
-            logger.info(f"  JobSpy India Remote [T{tier_num}] — {len(titles)} titles")
             all_raw.extend(scrape_jobspy_source(
-                titles=titles,
+                titles=titles[:5],
                 tier_num=tier_num,
                 tier_name=tier_name,
-                sites=ir_cfg["sites"],
-                location=ir_cfg["location"],
-                is_remote=ir_cfg["is_remote"],
-                hours_old=ir_cfg["hours_old"],
-                max_results_per_title=ir_cfg["max_results_per_title"],
-                country_indeed=ir_cfg.get("country_indeed"),
+                sites=ir_cfg.get("sites", ["indeed", "google"]),
+                location=ir_cfg.get("location", "India"),
+                is_remote=ir_cfg.get("is_remote", True),
+                hours_old=ir_cfg.get("hours_old", 168),
+                max_results_per_title=ir_cfg.get("max_results_per_title", 20),
+                country_indeed=ir_cfg.get("country_indeed", "IN"),
                 category="india_remote",
             ))
 
-        # ── JobSpy — Global Remote ────────────────────────────────────────────
+        # JobSpy Global Remote
         if "global_remote" in sources:
             gr_cfg = sources["global_remote"]
-            logger.info(f"  JobSpy Global Remote [T{tier_num}] — {len(titles)} titles")
             all_raw.extend(scrape_jobspy_source(
-                titles=titles,
+                titles=titles[:3],
                 tier_num=tier_num,
                 tier_name=tier_name,
-                sites=gr_cfg["sites"],
-                location=gr_cfg["location"],
-                is_remote=gr_cfg["is_remote"],
-                hours_old=gr_cfg["hours_old"],
-                max_results_per_title=gr_cfg["max_results_per_title"],
+                sites=gr_cfg.get("sites", ["indeed", "google", "glassdoor"]),
+                location=gr_cfg.get("location", "Remote"),
+                is_remote=gr_cfg.get("is_remote", True),
+                hours_old=gr_cfg.get("hours_old", 168),
+                max_results_per_title=gr_cfg.get("max_results_per_title", 15),
                 country_indeed=gr_cfg.get("country_indeed"),
                 category="global_remote",
             ))
 
-    logger.info(f"Total raw jobs scraped: {len(all_raw)}")
+    logger.info(f"Total raw jobs scraped across all direct & platform sources: {len(all_raw)}")
     return all_raw
 
 
@@ -339,21 +404,16 @@ def run_all_scrapers(config: dict, budget_guard) -> list[dict]:
 
 def _location_to_category(location: str) -> str:
     loc = location.lower()
-    if "mumbai" in loc:
+    if "mumbai" in loc or "navi mumbai" in loc or "thane" in loc:
         return "mumbai"
     if "pune" in loc:
         return "pune"
-    if "navi mumbai" in loc:
-        return "mumbai"
-    if "thane" in loc:
-        return "mumbai"
     if "india" in loc and "remote" not in loc:
         return "india_remote"
     return "global_remote"
 
 
 def _tier_to_legacy(tier_num: int) -> str:
-    """Map 6-tier number to legacy 2-tier role_tier string."""
     if tier_num <= 3:
         return "tier1_core_data"
     return "tier2_broader"

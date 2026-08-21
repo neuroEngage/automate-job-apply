@@ -157,6 +157,8 @@ _EXTRACTORS = {
     "zip_recruiter": _extract_jobspy,
     "jobspy": _extract_jobspy,
     "watchlist": _extract_watchlist,
+    "career_page_ats": _extract_watchlist,
+    "career_page_direct": _extract_watchlist,
 }
 
 
