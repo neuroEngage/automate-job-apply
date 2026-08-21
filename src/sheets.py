@@ -1,12 +1,20 @@
 """
-JobRadar — Google Sheets Integration
+JobRadar v2 — Google Sheets Integration
 
-Manages all 5 Google Sheet tabs:
+Manages all Google Sheet tabs:
   1. Job Tracker   — live sortable job list (main view)
   2. SeenJobs      — permanent dedup ledger (hidden)
   3. Archive       — jobs older than 30 days
   4. Reach Roles   — jobs requiring >4 YOE
   5. Run Log       — one row per run (operational dashboard)
+  6. Weekly Quota  — (v2) trailing 7-day application tracking by tier
+
+v2 changes:
+  - New columns: Priority Tier, Category Label, AI Exposure, Company Opp.,
+    Score Breakdown, Applied
+  - Applied column preserved on re-write (never clobber user input)
+  - Sort order: priority_tier ASC, overall_score DESC
+  - Weekly Quota tab
 
 Authentication: Google service account JSON from GOOGLE_SERVICE_ACCOUNT_JSON env var.
 """
@@ -17,21 +25,25 @@ from datetime import date
 
 import gspread
 
+from src.explainer import generate_compact_explanation
+
 logger = logging.getLogger(__name__)
 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Column definition for Job Tracker tab (exact order = sheet columns)
+# Column definition for Job Tracker tab (v2 — 36 columns)
 # ─────────────────────────────────────────────────────────────────────────────
 JOB_TRACKER_COLUMNS = [
     "#",
     "job_id",
-    "Category",
+    "Priority Tier",
+    "Category Label",
     "Role Tier",
     "Job Title",
     "Company",
     "Location",
+    "Region",
     "Posted Date",
     "Days Old",
     "Recency Bucket",
@@ -42,12 +54,16 @@ JOB_TRACKER_COLUMNS = [
     "Currency",
     "Skill Match",
     "Experience Fit",
-    "Comp Fit",
-    "Recency Bonus",
-    "Region Bonus",
+    "AI Exposure",
+    "Company Opp.",
+    "Location Fit",
+    "Freshness",
+    "Product/Biz",
+    "Startup/Own",
     "Stage A Score",
     "Stage B Score",
     "Overall Score",
+    "Score Breakdown",
     "Apply Link",
     "Resume Link",
     "Validation",
@@ -55,6 +71,7 @@ JOB_TRACKER_COLUMNS = [
     "Red Flags",
     "Source",
     "First Seen",
+    "Applied",
 ]
 
 SEEN_JOBS_COLUMNS = ["job_id", "first_seen_date", "last_seen_date"]
@@ -75,6 +92,19 @@ RUN_LOG_COLUMNS = [
     "errors",
     "notes",
 ]
+WEEKLY_QUOTA_COLUMNS = [
+    "week_ending",
+    "tier_1_applied",
+    "tier_1_target",
+    "tier_2_applied",
+    "tier_2_target",
+    "tier_3_applied",
+    "tier_3_target",
+    "tiers_4_5_6_applied",
+    "tiers_4_5_6_target",
+    "total_applied",
+    "notes",
+]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -85,7 +115,22 @@ def connect_sheet(sheet_id: str) -> gspread.Spreadsheet:
     """Authenticate with service account and open the Google Sheet by ID."""
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     if not sa_json:
-        raise EnvironmentError("GOOGLE_SERVICE_ACCOUNT_JSON env var not set")
+        # Check if a service account json file exists locally
+        from pathlib import Path
+        for f in Path(".").glob("*.json"):
+            if "client" in f.name or "service" in f.name or "account" in f.name:
+                try:
+                    with open(f, encoding="utf-8") as jf:
+                        data = json.load(jf)
+                        if data.get("type") == "service_account":
+                            sa_json = json.dumps(data)
+                            logger.info(f"Loaded service account credentials from {f.name}")
+                            break
+                except Exception:
+                    pass
+
+    if not sa_json:
+        raise EnvironmentError("GOOGLE_SERVICE_ACCOUNT_JSON env var not set and no local service account JSON found")
 
     creds_info = json.loads(sa_json)
     # gspread v6+: use service_account_from_dict() — gspread.authorize() was removed
@@ -104,6 +149,7 @@ def ensure_tabs(sheet: gspread.Spreadsheet, config: dict) -> None:
         config.get("sheets", {}).get("archive_tab", "Archive"): ARCHIVE_COLUMNS,
         config.get("sheets", {}).get("reach_roles_tab", "Reach Roles (5yr+)"): REACH_ROLES_COLUMNS,
         config.get("sheets", {}).get("run_log_tab", "Run Log"): RUN_LOG_COLUMNS,
+        config.get("sheets", {}).get("weekly_quota_tab", "Weekly Quota"): WEEKLY_QUOTA_COLUMNS,
     }
 
     existing_titles = {ws.title for ws in sheet.worksheets()}
@@ -115,6 +161,38 @@ def ensure_tabs(sheet: gspread.Spreadsheet, config: dict) -> None:
             logger.info(f"Created tab: {tab_name}")
         else:
             logger.debug(f"Tab already exists: {tab_name}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Applied status preservation (v2 — item #10)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def read_existing_applied_status(sheet: gspread.Spreadsheet, tab_name: str = "Job Tracker") -> dict:
+    """
+    Reads the Applied column for existing rows in Job Tracker.
+    Returns {job_id: applied_value} so we never clobber user input.
+    """
+    try:
+        ws = sheet.worksheet(tab_name)
+        all_rows = ws.get_all_values()
+        if not all_rows:
+            return {}
+        header = all_rows[0]
+        if "job_id" not in header or "Applied" not in header:
+            return {}
+        id_col = header.index("job_id")
+        applied_col = header.index("Applied")
+        result = {}
+        for row in all_rows[1:]:
+            if len(row) > max(id_col, applied_col):
+                jid = row[id_col]
+                applied = row[applied_col]
+                if jid and applied:
+                    result[jid] = applied
+        return result
+    except Exception as e:
+        logger.warning(f"Could not read existing Applied status: {e}")
+        return {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,20 +214,35 @@ def _recency_bucket(days_old: int | None) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job row serializer
+# Job row serializer (v2 — 37 columns)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _job_to_row(job: dict, row_num: int) -> list:
+def _job_to_row(job: dict, row_num: int, applied_status: dict | None = None) -> list:
     """Converts a scored job dict to a list matching JOB_TRACKER_COLUMNS."""
     days_old = job.get("days_old")
+    jid = job.get("job_id", "")
+
+    # Preserve existing Applied status if user has set it
+    applied = ""
+    if applied_status and jid in applied_status:
+        applied = applied_status[jid]
+
+    # Generate compact score breakdown
+    try:
+        breakdown = generate_compact_explanation(job)
+    except Exception:
+        breakdown = ""
+
     return [
         row_num,                                             # #
-        job.get("job_id", ""),                               # job_id
-        job.get("category", ""),                             # Category
+        jid,                                                 # job_id
+        job.get("priority_tier", ""),                        # Priority Tier
+        job.get("category_label", ""),                       # Category Label
         job.get("role_tier", ""),                            # Role Tier
         job.get("title", ""),                                # Job Title
         job.get("company", ""),                              # Company
         job.get("location", ""),                             # Location
+        job.get("region", ""),                               # Region
         job.get("posted_date", ""),                          # Posted Date
         str(days_old) if days_old is not None else "",       # Days Old
         _recency_bucket(days_old),                           # Recency Bucket
@@ -160,12 +253,16 @@ def _job_to_row(job: dict, row_num: int) -> list:
         job.get("salary_currency", ""),                      # Currency
         job.get("skill_match_score", ""),                    # Skill Match
         job.get("experience_fit_score", ""),                 # Experience Fit
-        job.get("comp_fit_score", ""),                       # Comp Fit
-        job.get("recency_bonus", ""),                        # Recency Bonus
-        job.get("region_bonus", ""),                         # Region Bonus
+        job.get("ai_exposure_score", ""),                    # AI Exposure
+        job.get("company_opportunity_score", ""),            # Company Opp.
+        job.get("location_fit_score", ""),                   # Location Fit
+        job.get("freshness_score", ""),                      # Freshness
+        job.get("product_business_score", ""),               # Product/Biz
+        job.get("startup_ownership_score", ""),              # Startup/Own
         job.get("stage_a_score", ""),                        # Stage A Score
         job.get("stage_b_refined_score", ""),                # Stage B Score
         job.get("overall_score", job.get("stage_a_score", "")),  # Overall Score
+        breakdown,                                           # Score Breakdown
         job.get("url", ""),                                  # Apply Link
         job.get("resume_link", ""),                          # Resume Link
         job.get("validation_status", ""),                    # Validation
@@ -173,6 +270,7 @@ def _job_to_row(job: dict, row_num: int) -> list:
         job.get("red_flags", ""),                            # Red Flags
         job.get("source", ""),                               # Source
         job.get("first_seen_date", ""),                      # First Seen
+        applied,                                             # Applied
     ]
 
 
@@ -180,7 +278,12 @@ def _job_to_row(job: dict, row_num: int) -> list:
 # Write functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def append_job_rows(sheet: gspread.Spreadsheet, jobs: list[dict], tab_name: str = "Job Tracker") -> int:
+def append_job_rows(
+    sheet: gspread.Spreadsheet,
+    jobs: list[dict],
+    tab_name: str = "Job Tracker",
+    applied_status: dict | None = None,
+) -> int:
     """Appends new job rows to the specified tab. Returns number of rows written."""
     if not jobs:
         return 0
@@ -190,7 +293,7 @@ def append_job_rows(sheet: gspread.Spreadsheet, jobs: list[dict], tab_name: str 
         existing = ws.get_all_values()
         start_num = len(existing)  # header is row 1
 
-        rows = [_job_to_row(job, start_num + i) for i, job in enumerate(jobs)]
+        rows = [_job_to_row(job, start_num + i, applied_status) for i, job in enumerate(jobs)]
         ws.append_rows(rows, value_input_option="RAW")
         logger.info(f"Appended {len(rows)} rows to '{tab_name}'")
         return len(rows)

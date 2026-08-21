@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# JobRadar — Search & Scoring Configuration
+# JobRadar v2 — Search & Scoring Configuration
 # Edit this file to retune titles, thresholds, or budget without touching code.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -49,58 +49,259 @@ candidate_profile:
     - BI
     - analytics
 
-  # ── Two-tier title config (DO NOT flatten — tier drives scoring weight) ─────
-  # Tier 1: CDAC BDA-aligned, highest weight. Tier 2: additive, lower weight.
-  target_titles_tier1_core_data:
-    - "Data Analyst"
-    - "Data Scientist"
-    - "Data Engineer"
-    - "AI Engineer"
-    - "ML Engineer"
-    - "AI/ML Engineer"
-    - "GenAI Engineer"
-    - "LLM Engineer"
-    - "Prompt Engineer"
-    - "BI Developer"
-    - "BI Analyst"
-    - "Business Intelligence Analyst"
-    - "Analytics Engineer"
-    - "Research Analyst"
-    - "Big Data Engineer"
-    - "Data Research Analyst"
-
-  target_titles_tier2_broader:
-    - "Product Associate"
-    - "AI Product Associate"
-    - "Associate Product Manager"
-    - "Junior Product Manager"
-    - "Product Analyst"
-    - "Business Analyst"
-    - "Growth Analyst"
-    - "GTM Associate"
-    - "Founder's Office Associate"
-    - "Chief of Staff Associate"
-    - "AI Solutions Consultant"
-    - "Strategy Associate"
-
   # ── Compensation filters ───────────────────────────────────────────────────
   currency_targets_remote: ["USD", "EUR", "GBP"]
   min_remote_comp_usd_equivalent: 30000   # annual floor for global-remote listings
   min_mumbai_comp_inr_lpa: 8             # flags (doesn't exclude) low Mumbai comp
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 6-Tier Role Priority System (v2 — replaces 2-tier titles)
+#
+# Each tier carries its own title list and signal-keyword list.
+# The scorer tags every job with a priority_tier (1–6) via title match
+# against this list (falls back to keyword-overlap if no exact title hit).
+#
+# Sort rule: primary by priority_tier ASC, secondary by overall_score DESC.
+# ─────────────────────────────────────────────────────────────────────────────
+role_priorities:
+  - tier: 1
+    name: "Data Engineering"
+    titles:
+      - "Data Engineer"
+      - "Junior Data Engineer"
+      - "Associate Data Engineer"
+      - "Graduate Data Engineer"
+      - "Data Engineering Trainee"
+      - "Data Engineering Intern"
+      - "Big Data Engineer"
+      - "Big Data Developer"
+      - "Big Data Analyst"
+      - "Hadoop Developer"
+      - "Spark Developer"
+      - "PySpark Developer"
+      - "ETL Developer"
+      - "ETL Engineer"
+      - "Data Pipeline Engineer"
+      - "Data Platform Engineer"
+      - "Cloud Data Engineer"
+      - "AWS Data Engineer"
+      - "Analytics Engineer"
+      - "Data Infrastructure Engineer"
+      - "Data Warehouse Developer"
+      - "Data Operations Engineer"
+      - "Python Data Engineer"
+    signal_keywords:
+      - Python
+      - SQL
+      - Spark
+      - PySpark
+      - Hadoop
+      - AWS
+      - S3
+      - EMR
+      - Athena
+      - Kafka
+      - Airflow
+      - ETL
+      - ELT
+      - data pipelines
+      - data lakes
+      - data warehouses
+      - Parquet
+      - cloud data platforms
+      - data pipeline
+      - data lake
+      - data warehouse
+
+  - tier: 2
+    name: "Data / Product Analytics"
+    titles:
+      - "Data Analyst"
+      - "Junior Data Analyst"
+      - "Associate Data Analyst"
+      - "Graduate Data Analyst"
+      - "Data Analyst Intern"
+      - "Product Analyst"
+      - "Product Data Analyst"
+      - "Business Analyst"
+      - "BI Analyst"
+      - "Analytics Analyst"
+      - "Business Analytics"
+      - "Product Analytics"
+      - "Growth Analyst"
+      - "Strategy Analyst"
+      - "Decision Analyst"
+      - "Operations Analyst"
+      - "Reporting Analyst"
+      - "Data Scientist"
+      - "Research Analyst"
+      - "Data Research Analyst"
+      - "BI Developer"
+      - "Business Intelligence Analyst"
+    signal_keywords:
+      - SQL
+      - Python
+      - Pandas
+      - Excel
+      - Power BI
+      - Tableau
+      - statistics
+      - EDA
+      - data viz
+      - data visualization
+      - business insights
+      - product metrics
+      - customer analytics
+      - growth analytics
+      - A/B testing
+
+  - tier: 3
+    name: "Core AI/ML"
+    titles:
+      - "AI Engineer"
+      - "ML Engineer"
+      - "AI/ML Engineer"
+      - "Applied AI Engineer"
+      - "AI Developer"
+      - "Generative AI Engineer"
+      - "GenAI Engineer"
+      - "NLP Engineer"
+      - "Computer Vision Engineer"
+      - "MLOps Engineer"
+      - "AI Research Intern"
+      - "Junior AI Engineer"
+      - "Junior ML Engineer"
+      - "LLM Engineer"
+      - "Prompt Engineer"
+    signal_keywords:
+      - Generative AI
+      - LLMs
+      - RAG
+      - AI agents
+      - agentic AI
+      - NLP
+      - computer vision
+      - ML
+      - deep learning
+      - AI automation
+      - AI-powered applications
+      - machine learning
+      - GenAI
+      - LLM
+
+  - tier: 4
+    name: "AI + Product/Business"
+    titles:
+      - "AI Product Analyst"
+      - "AI Product Associate"
+      - "AI Business Analyst"
+      - "AI Strategy Analyst"
+      - "AI Solutions Analyst"
+      - "AI Consultant"
+      - "AI Transformation Associate"
+      - "AI Transformation Analyst"
+      - "AI Operations Associate"
+      - "AI Operations Analyst"
+      - "AI Program Associate"
+      - "AI Program Analyst"
+      - "AI Innovation Associate"
+      - "AI Innovation Analyst"
+      - "Technology Strategy Analyst"
+      - "Data & Strategy Analyst"
+    signal_keywords:
+      - AI strategy
+      - AI transformation
+      - AI adoption
+      - AI solutions
+      - AI consulting
+      - technology strategy
+      - digital transformation
+
+  - tier: 5
+    name: "Founder's Office / Strategy / Startup Generalist"
+    titles:
+      - "Founder's Office"
+      - "Founder's Office Associate"
+      - "Founder's Office - AI"
+      - "Founder's Office - Technology"
+      - "Founder's Office - Product"
+      - "Founder's Office - Strategy"
+      - "Founder's Office - Growth"
+      - "Strategy & Operations"
+      - "Business Operations"
+      - "Chief of Staff"
+      - "Chief of Staff - Technology"
+      - "Chief of Staff - AI"
+      - "Product & Strategy Associate"
+      - "Startup Generalist"
+      - "AI Innovation Associate"
+      - "Technology & Business Associate"
+    signal_keywords:
+      - founder
+      - ownership
+      - cross-functional
+      - strategy
+      - operations
+      - startup
+      - 0 to 1
+      - growth
+      - business operations
+    # Never reject these for being non-engineering
+    never_reject_non_engineering: true
+
+  - tier: 6
+    name: "AI Startups / AI+GTM / Growth"
+    titles:
+      - "AI Growth Associate"
+      - "AI GTM Associate"
+      - "AI Go-To-Market Analyst"
+      - "AI Business Development"
+      - "AI Partnerships"
+      - "AI Sales Engineering"
+      - "Technical GTM"
+      - "AI RevOps"
+      - "Growth Analyst"
+      - "GTM Associate"
+    signal_keywords:
+      - GenAI
+      - AI agents
+      - AI automation
+      - AI dev tools
+      - AI SaaS
+      - AI infrastructure
+      - AI analytics
+      - AI fintech
+      - AI healthtech
+      - AI edtech
+      - AI commerce
+      - go-to-market
+      - GTM
+      - growth
+      - partnerships
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sources
 # ─────────────────────────────────────────────────────────────────────────────
 sources:
-  # Each source runs TWICE per run: once for tier1 titles, once for tier2.
-  # This lets the scorer tag role_tier on every incoming job.
+  # Each source now runs ONCE per tier (6 tiers) instead of 2.
+  # The scraper iterates over role_priorities[].titles for each source.
 
   mumbai_local:
     engine: apify_linkedin             # valig/linkedin-jobs-scraper
     location: "Mumbai, Maharashtra, India"
+    # Full Mumbai metro coverage — scraper uses broad location query,
+    # normalizer resolves sub-region from job location string
     date_posted: "r604800"             # last 7 days; dedup catches yesterday's already
     max_results_per_title: 25
     max_charge_usd_per_call: 0.05      # hard Apify budget per call
+
+  # v2: Pune source — mirrors mumbai_local config
+  pune_local:
+    engine: apify_linkedin
+    location: "Pune, Maharashtra, India"
+    date_posted: "r604800"
+    max_results_per_title: 25
+    max_charge_usd_per_call: 0.05
 
   india_remote:
     engine: jobspy
@@ -119,6 +320,15 @@ sources:
     max_results_per_title: 30
     max_charge_usd_per_call: 0.05
 
+  # v2: Naukri Pune source
+  naukri_pune:
+    engine: apify_naukri
+    location: "Pune,India"
+    experience_min: 0
+    experience_max: 3
+    max_results_per_title: 30
+    max_charge_usd_per_call: 0.05
+
   global_remote:
     engine: jobspy
     sites: ["indeed", "glassdoor", "google", "zip_recruiter"]
@@ -129,51 +339,117 @@ sources:
     country_indeed: ["USA", "UK", "Germany", "Netherlands", "Singapore", "Canada"]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Scoring weights & bonuses
+# v2 — 9-Component Scoring Formula
+#
+# All rule-based (keyword matching, TF-IDF/cosine similarity via scikit-learn).
+# No LLM call required. Claude Haiku Stage B remains optional refinement only.
+#
+# Each component is computed on a 0–100 scale, then weighted:
 # ─────────────────────────────────────────────────────────────────────────────
+scoring_v2:
+  # Component weights (must sum to 1.0)
+  data_ai_skill_match: 0.25        # TF-IDF cosine similarity of candidate skills vs JD
+  role_priority_match: 0.20        # derived from priority_tier (tier 1 = full marks)
+  fresher_compatibility: 0.10      # experience gate logic, rescaled to 0–100
+  ai_technology_exposure: 0.10     # AI keyword density from ai_signal_detector
+  company_opportunity: 0.10        # company opportunity score from company_opportunity
+  location_fit: 0.10               # region-based score
+  job_freshness: 0.05              # recency score
+  product_business_exposure: 0.05  # keyword hits: product, roadmap, customer, GTM, etc.
+  startup_ownership_potential: 0.05 # keyword hits: founder, ownership, fast-paced, etc.
+
+  # Role priority tier scoring (tier → score out of 100)
+  tier_scores:
+    1: 100
+    2: 80
+    3: 60
+    4: 40
+    5: 25
+    6: 15
+
+  # Location fit scoring (region → score out of 100)
+  # Priority order: Mumbai > Navi Mumbai > Thane > Pune > India remote > global remote
+  location_scores:
+    mumbai_metro: 100
+    navi_mumbai: 90
+    thane: 80
+    pune: 65
+    naukri: 75          # India-local via Naukri, between Thane and Pune
+    india_remote: 50
+    global_remote: 30
+
+  # Job freshness scoring (days_old → score out of 100)
+  freshness_scores:
+    days_0_to_3: 100
+    days_4_to_7: 80
+    days_8_to_14: 50
+    days_15_to_30: 20
+    days_over_30: 0
+
+  # Product/Business exposure keywords
+  product_business_keywords:
+    - product
+    - roadmap
+    - customer
+    - GTM
+    - go-to-market
+    - strategy
+    - ownership
+    - stakeholder
+    - business impact
+    - revenue
+
+  # Startup/Ownership potential keywords
+  startup_ownership_keywords:
+    - founder
+    - ownership
+    - fast-paced
+    - 0-to-1
+    - 0 to 1
+    - cross-functional
+    - wear many hats
+    - early stage
+    - seed stage
+    - high-growth
+    - startup
+    - start-up
+
+  # Stage B (Claude Haiku) threshold — only jobs above this get LLM refinement
+  stage_b_min_score: 60.0          # v2: on 0–100 scale (was 6.0 on 0–10)
+
+  # ATS resume generation threshold
+  resume_min_score: 75.0           # v2: on 0–100 scale (was 7.5 on 0–10)
+  resume_max_per_day: 5            # HARD CAP — not configurable without editing this line
+
+# ── Legacy scoring keys (kept for backward compat, unused by v2 scorer) ─────
 scoring:
-  # Stage A formula:
-  # score = (skill_w * skill * tier_mult) + (exp_w * exp_fit) + (comp_w * comp_fit)
-  #         + recency_bonus + region_bonus - tier2_flat_penalty
   skill_weight: 0.35
   exp_weight: 0.25
   comp_weight: 0.25
-  # remaining 0.15 is shared between recency + region bonuses
-
-  # Recency scoring (max +2.0 to overall score)
-  # Preference: most recent = highest, 0-3 days best window
   recency_bonus:
-    days_0_to_3: 2.0      # HIGHEST — freshest postings, most likely still open
+    days_0_to_3: 2.0
     days_4_to_7: 1.5
     days_8_to_14: 0.75
     days_15_to_30: 0.25
     days_over_30: 0.0
-
-  # Region priority bonus (added directly to overall score)
   region_bonus:
     mumbai: 1.5
     india_remote: 0.75
-    naukri: 1.0            # India-local, treated between mumbai and india_remote
+    naukri: 1.0
     global_remote: 0.0
-
-  # Role Tier weight applied to skill component only
-  tier2_skill_multiplier: 0.85    # tier2 skill score * 0.85
-  tier2_flat_penalty: 0.5         # subtract 0.5 from final score for tier2
-
-  # Stage B (Claude Haiku) threshold — only jobs above this get LLM refinement
+  tier2_skill_multiplier: 0.85
+  tier2_flat_penalty: 0.5
   stage_b_min_score: 6.0
-
-  # ATS resume generation threshold
   resume_min_score: 7.5
-  resume_max_per_day: 5           # HARD CAP — not configurable without editing this line
+  resume_max_per_day: 5
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Company page validation
 # ─────────────────────────────────────────────────────────────────────────────
 validation:
   enabled: true
-  # Run validation for all jobs where overall_score_stage_a >= this threshold
-  min_score_to_validate: 5.0
+  # Run validation for all jobs where overall_score >= this threshold
+  min_score_to_validate: 50.0      # v2: on 0–100 scale (was 5.0 on 0–10)
   # Timeout per company page HTTP request (seconds)
   request_timeout_sec: 10
   # If validation fails (no careers page found / request error), keep job but flag it
@@ -201,8 +477,45 @@ sheets:
   archive_tab: "Archive"
   reach_roles_tab: "Reach Roles (5yr+)"
   run_log_tab: "Run Log"
+  weekly_quota_tab: "Weekly Quota"
   # Archive jobs older than this many days (with no re-sighting)
   archive_after_days: 30
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Weekly Quota Tracker (v2)
+#
+# Tracks Applied jobs by priority tier over trailing 7 days against target
+# allocation. Configurable per-tier percentages.
+# ─────────────────────────────────────────────────────────────────────────────
+weekly_quota:
+  enabled: true
+  allocation:
+    tier_1: 0.40    # 40% Priority 1 (Data Engineering)
+    tier_2: 0.30    # 30% Priority 2 (Analytics)
+    tier_3: 0.20    # 20% Priority 3 (Core AI/ML)
+    tiers_4_5_6: 0.10  # 10% Priorities 4–6 combined
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Company Watchlist (v2)
+# ─────────────────────────────────────────────────────────────────────────────
+company_watchlist:
+  enabled: true
+  config_file: "company_watchlist.yaml"
+  cache_file: ".watchlist_cache.json"
+  min_check_interval_hours: 20     # skip company if checked < this many hours ago
+  request_timeout_sec: 10
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily Digest (v2)
+#
+# Sends a categorized daily digest (10 sections) via email or webhook.
+# Fully optional — run continues if no delivery mechanism configured.
+# ─────────────────────────────────────────────────────────────────────────────
+digest:
+  enabled: true
+  # Set NOTIFY_EMAIL env var or WEBHOOK_URL secret to enable delivery
+  # If neither is set, digest is composed but not sent (logged only)
+  max_jobs_per_section: 10         # cap per category section to keep digest readable
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Claude model selection

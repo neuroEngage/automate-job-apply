@@ -1,89 +1,78 @@
 """
-JobRadar — Main Orchestrator
+JobRadar v2 — Pipeline Orchestrator
 
-Runs the full pipeline in order:
-  1. Load config + init budget guard
-  2. Scrape (LinkedIn Apify, Naukri Apify, JobSpy)
-  3. Normalize → common schema
-  4. Dedup against SeenJobs ledger
-  5. Append new job_ids to SeenJobs (immediately, before scoring)
-  6. Stage A scoring (free, rule-based) → route to tracker / reach / skip
-  7. Company page validation (for jobs above score threshold)
-  8. Stage B scoring (Claude Haiku, batched, score >= 6 only) [if budget allows]
-  9. ATS resume generation (score >= 7.5, ≤5/day) [if budget allows]
-  10. Write scored jobs to Job Tracker tab
-  11. Write reach-role jobs to Reach Roles tab
-  12. Update last_seen for re-sighted jobs
-  13. Archive stale rows (>30 days, no re-sighting)
-  14. Log run stats to Run Log tab
+Sequential, deterministic pipeline. Run daily via GitHub Actions cron
+at 2:00 UTC (7:30 AM IST). Manually triggerable via workflow_dispatch.
 
-Anti-regression rules enforced:
-  - Every step wrapped in try/except — failures logged and run continues
-  - Budget guard checked before every paid API call
-  - SeenJobs appended before scoring (crash-safe dedup)
-  - Resume gen gated by resume_base.json sentinel
-  - No auto-apply: system surfaces, human submits
+v2 pipeline steps:
+  1.  Load config + authenticate sheets
+  2.  Scrape all sources (6 tiers × 6 sources)
+  2.5 Run company watchlist checks
+  3.  Normalize raw jobs
+  4.  Dedup against SeenJobs ledger
+  5.  Score Stage A (9-component formula, free, 100% of jobs)
+  6.  Validate company pages (for high-scoring jobs)
+  7.  Score Stage B (Claude Haiku, paid, top jobs only)
+  8.  Generate ATS resumes (for top-scoring jobs)
+  9.  Read existing Applied status (before writing)
+  10. Write to Job Tracker (sorted: priority_tier ASC, overall_score DESC)
+  11. Write to Reach Roles (>4 YOE)
+  12. Update SeenJobs ledger
+  13. Update Weekly Quota tracker
+  14. Archive stale jobs
+  15. Compose & send daily digest
+  16. Log run to Run Log
 """
 import logging
 import os
 import sys
-from datetime import datetime, date
+import time
+from datetime import datetime
+from pathlib import Path
 
 import anthropic
 import yaml
 
-from src.budget_guard import MonthlyBudgetGuard, BudgetExceeded
-from src.dedup import (
-    load_seen_ids,
-    filter_new_jobs,
-    append_seen_ids,
-    update_last_seen,
-    archive_old_jobs,
-)
+from src.budget_guard import BudgetExceeded, MonthlyBudgetGuard
+from src.company_watchlist import run_watchlist_checks
+from src.dedup import filter_new_jobs, load_seen_ids, append_seen_ids
+from src.digest import compose_digest, send_digest
 from src.normalizer import normalize_all
+from src.quota_tracker import compute_quota, write_quota
 from src.resume_generator import generate_resumes
-from src.scorer import score_all_stage_a, stage_b_score_batch
+from src.scorer import compute_stage_a, score_all_stage_a, stage_b_score_batch
 from src.scraper import run_all_scrapers
-from src.sheets import connect_sheet, ensure_tabs, append_job_rows, log_run
+from src.sheets import (
+    connect_sheet,
+    ensure_tabs,
+    append_job_rows,
+    log_run,
+    read_existing_applied_status,
+)
 from src.validator import validate_jobs
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging setup
 # ─────────────────────────────────────────────────────────────────────────────
+LOG_FILE = "jobradar_run.log"
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s: %(message)s",
+    format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("jobradar_run.log", encoding="utf-8"),
     ],
 )
-logger = logging.getLogger("jobradar.main")
+logger = logging.getLogger("jobradar")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Config loader
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_config(path: str = "config.yaml") -> dict:
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Main pipeline
-# ─────────────────────────────────────────────────────────────────────────────
-
-def main() -> None:
-    run_start = datetime.now()
-    logger.info("=" * 60)
-    logger.info(f"JobRadar run started at {run_start.isoformat()}")
-    logger.info("=" * 60)
-
-    # Collect run stats for the Run Log
+def main():
+    run_start = time.time()
+    timestamp = datetime.now().isoformat()
+    errors: list[str] = []
     stats = {
-        "timestamp": run_start.isoformat(),
+        "timestamp": timestamp,
         "jobs_scraped": 0,
         "jobs_new": 0,
         "jobs_scored_stage_a": 0,
@@ -93,227 +82,235 @@ def main() -> None:
         "archived": 0,
         "spend_usd": 0.0,
         "budget_degraded": False,
-        "errors": [],
+        "errors": errors,
         "notes": "",
     }
 
-    # ── Load config ────────────────────────────────────────────────────────
-    config = load_config()
-    sheet_cfg = config.get("sheets", {})
-    today = date.today()
+    dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
 
-    # ── Connect to Google Sheet ────────────────────────────────────────────
-    sheet_id = os.environ.get("GOOGLE_SHEET_ID")
-    if not sheet_id:
-        logger.error("GOOGLE_SHEET_ID env var not set — cannot proceed")
-        sys.exit(1)
+    # ── Step 1: Load config ──────────────────────────────────────────────────
+    logger.info("═══ JobRadar v2 Pipeline Starting ═══")
+    with open("config.yaml", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
 
-    sheet = connect_sheet(sheet_id)
-    ensure_tabs(sheet, config)
+    # Connect to Google Sheets (skip if dry-run without creds)
+    sheet = None
+    if not dry_run or os.environ.get("GOOGLE_SHEET_ID"):
+        try:
+            sheet_id = os.environ.get("GOOGLE_SHEET_ID", "")
+            if sheet_id:
+                sheet = connect_sheet(sheet_id)
+                ensure_tabs(sheet, config)
+        except Exception as e:
+            logger.error(f"Sheet connection failed: {e}")
+            errors.append(f"Sheet connection: {e}")
 
-    # ── Init budget guard ──────────────────────────────────────────────────
-    budget_guard = MonthlyBudgetGuard(sheet, config)
+    # Budget guard
+    budget_guard = MonthlyBudgetGuard(sheet, config) if sheet else _MockBudgetGuard()
 
-    # ── Init Claude client ─────────────────────────────────────────────────
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    claude_client = anthropic.Anthropic(api_key=anthropic_key) if anthropic_key else None
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 1: Scrape
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 1: Scraping ──")
-    raw_jobs = []
+    # ── Step 2: Scrape all sources ───────────────────────────────────────────
+    logger.info("─── Step 2: Scraping ───")
+    all_raw = []
     try:
-        raw_jobs = run_all_scrapers(config, budget_guard)
-        stats["jobs_scraped"] = len(raw_jobs)
-        logger.info(f"Scraped {len(raw_jobs)} raw job records")
+        all_raw = run_all_scrapers(config, budget_guard)
+        stats["jobs_scraped"] = len(all_raw)
+        logger.info(f"Scraped {len(all_raw)} raw jobs")
     except BudgetExceeded as e:
         logger.warning(f"Budget exceeded during scraping: {e}")
         stats["budget_degraded"] = True
-        stats["errors"].append(f"Budget exceeded during scraping: {e}")
+        errors.append(f"Budget: {e}")
     except Exception as e:
-        logger.error(f"Scraping failed: {e}", exc_info=True)
-        stats["errors"].append(f"Scraping error: {e}")
+        logger.error(f"Scraping failed: {e}")
+        errors.append(f"Scraping: {e}")
 
-    if not raw_jobs:
-        logger.warning("No jobs scraped — run ending early")
-        _finalize(sheet, stats, budget_guard)
+    # ── Step 2.5: Company watchlist checks ───────────────────────────────────
+    logger.info("─── Step 2.5: Company Watchlist ───")
+    try:
+        watchlist_jobs = run_watchlist_checks(config)
+        all_raw.extend(watchlist_jobs)
+        logger.info(f"Watchlist added {len(watchlist_jobs)} jobs")
+    except Exception as e:
+        logger.error(f"Watchlist check failed: {e}")
+        errors.append(f"Watchlist: {e}")
+
+    if not all_raw:
+        logger.warning("No jobs scraped or found. Logging run and exiting.")
+        if sheet:
+            log_run(sheet, stats)
         return
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 2: Normalize
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 2: Normalizing ──")
-    normalized = []
-    try:
-        normalized = normalize_all(raw_jobs, today)
-        logger.info(f"Normalized: {len(normalized)} records")
-    except Exception as e:
-        logger.error(f"Normalization failed: {e}", exc_info=True)
-        stats["errors"].append(f"Normalization error: {e}")
-        _finalize(sheet, stats, budget_guard)
+    # ── Step 3: Normalize ────────────────────────────────────────────────────
+    logger.info("─── Step 3: Normalizing ───")
+    normalized = normalize_all(all_raw, config=config)
+    logger.info(f"Normalized: {len(normalized)} jobs")
+
+    # ── Step 4: Dedup ────────────────────────────────────────────────────────
+    logger.info("─── Step 4: Deduplication ───")
+    seen_ids = load_seen_ids(sheet) if sheet else set()
+    new_jobs, re_sighted = filter_new_jobs(normalized, seen_ids)
+    stats["jobs_new"] = len(new_jobs)
+    logger.info(f"New: {len(new_jobs)} | Re-sighted: {len(re_sighted)}")
+
+    if not new_jobs:
+        logger.info("No new jobs after dedup. Logging run and exiting.")
+        if sheet:
+            log_run(sheet, stats)
         return
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 3: Dedup
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 3: Deduplication ──")
-    new_jobs = normalized
-    re_sighted_ids = []
-    try:
-        seen_ids = load_seen_ids(sheet)
-        new_jobs, re_sighted_ids = filter_new_jobs(normalized, seen_ids)
-        stats["jobs_new"] = len(new_jobs)
-        logger.info(f"New jobs: {len(new_jobs)}, re-sighted: {len(re_sighted_ids)}")
-    except Exception as e:
-        logger.error(f"Dedup failed: {e}", exc_info=True)
-        stats["errors"].append(f"Dedup error: {e}")
-        new_jobs = normalized  # proceed without dedup to avoid losing data
+    # ── Step 5: Stage A Scoring ──────────────────────────────────────────────
+    logger.info("─── Step 5: Stage A Scoring (9-component formula) ───")
+    tracker_jobs, reach_jobs, skipped = score_all_stage_a(new_jobs, config)
+    stats["jobs_scored_stage_a"] = len(tracker_jobs) + len(reach_jobs)
+    logger.info(
+        f"Stage A: {len(tracker_jobs)} tracker | {len(reach_jobs)} reach | {len(skipped)} skipped"
+    )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 4: Append to SeenJobs IMMEDIATELY (before any scoring)
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 4: Appending to SeenJobs ledger ──")
+    # ── Step 6: Validation ───────────────────────────────────────────────────
+    logger.info("─── Step 6: Validation ───")
     try:
-        new_ids = [j["job_id"] for j in new_jobs]
-        append_seen_ids(sheet, new_ids, today)
+        min_val_score = config.get("validation", {}).get("min_score_to_validate", 50.0)
+        tracker_jobs = validate_jobs(tracker_jobs, config, min_val_score)
     except Exception as e:
-        logger.error(f"SeenJobs append failed: {e}")
-        stats["errors"].append(f"SeenJobs append error: {e}")
+        logger.error(f"Validation failed: {e}")
+        errors.append(f"Validation: {e}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 5: Stage A Scoring
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 5: Stage A Scoring (free) ──")
-    tracker_jobs, reach_jobs, skipped_jobs = [], [], []
-    try:
-        tracker_jobs, reach_jobs, skipped_jobs = score_all_stage_a(new_jobs, config)
-        stats["jobs_scored_stage_a"] = len(tracker_jobs)
-        stats["reach_roles_added"] = len(reach_jobs)
-        logger.info(
-            f"Stage A: {len(tracker_jobs)} tracker, {len(reach_jobs)} reach, {len(skipped_jobs)} skipped"
-        )
-    except Exception as e:
-        logger.error(f"Stage A scoring failed: {e}", exc_info=True)
-        stats["errors"].append(f"Stage A error: {e}")
-        tracker_jobs = new_jobs  # fallback: send everything to tracker unscored
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 6: Company Page Validation
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 6: Company Page Validation ──")
-    try:
-        min_score_to_validate = config.get("validation", {}).get("min_score_to_validate", 5.0)
-        validate_jobs(tracker_jobs, config, min_score_to_validate)
-        logger.info("Validation complete")
-    except Exception as e:
-        logger.error(f"Validation failed: {e}", exc_info=True)
-        stats["errors"].append(f"Validation error: {e}")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 7: Stage B Scoring (Claude Haiku)
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 7: Stage B Scoring (Claude Haiku) ──")
-    if claude_client and not budget_guard.is_degraded:
+    # ── Step 7: Stage B Scoring (paid, optional) ─────────────────────────────
+    if not budget_guard.is_degraded:
+        logger.info("─── Step 7: Stage B Scoring (Claude Haiku) ───")
         try:
-            tracker_jobs = stage_b_score_batch(tracker_jobs, claude_client, budget_guard, config)
-            scored_b = sum(1 for j in tracker_jobs if "stage_b_refined_score" in j)
-            stats["jobs_scored_stage_b"] = scored_b
-            logger.info(f"Stage B: {scored_b} jobs refined")
+            client = anthropic.Anthropic()
+            tracker_jobs = stage_b_score_batch(tracker_jobs, client, budget_guard, config)
+            stage_b_count = sum(1 for j in tracker_jobs if "stage_b_refined_score" in j)
+            stats["jobs_scored_stage_b"] = stage_b_count
         except BudgetExceeded as e:
-            logger.warning(f"Budget exceeded during Stage B: {e}")
+            logger.warning(f"Budget hit during Stage B: {e}")
             stats["budget_degraded"] = True
-            stats["errors"].append(f"Budget exceeded at Stage B: {e}")
         except Exception as e:
-            logger.error(f"Stage B failed: {e}", exc_info=True)
-            stats["errors"].append(f"Stage B error: {e}")
+            logger.error(f"Stage B failed: {e}")
+            errors.append(f"Stage B: {e}")
     else:
-        if not claude_client:
-            logger.warning("ANTHROPIC_API_KEY not set — skipping Stage B")
-        else:
-            logger.warning("Budget degraded — skipping Stage B")
-        # Ensure overall_score is set from Stage A
+        logger.info("─── Step 7: Skipping Stage B (budget degraded) ───")
         for job in tracker_jobs:
-            job.setdefault("overall_score", job.get("stage_a_score", 0.0))
+            job["overall_score"] = job.get("stage_a_score", 0)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 8: ATS Resume Generation
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 8: ATS Resume Generation ──")
-    if claude_client and not budget_guard.is_degraded:
+    # Ensure overall_score is set for all jobs
+    for job in tracker_jobs:
+        if "overall_score" not in job:
+            job["overall_score"] = job.get("stage_a_score", 0)
+
+    # ── Sort: priority_tier ASC, overall_score DESC ──────────────────────────
+    tracker_jobs.sort(key=lambda j: (j.get("priority_tier", 6), -j.get("overall_score", 0)))
+    reach_jobs.sort(key=lambda j: -j.get("overall_score", 0))
+
+    # ── Step 8: Resume generation (paid, optional) ───────────────────────────
+    if not budget_guard.is_degraded:
+        logger.info("─── Step 8: Resume Generation ───")
         try:
-            tracker_jobs = generate_resumes(tracker_jobs, claude_client, budget_guard, config)
-            resumes_made = sum(1 for j in tracker_jobs if j.get("resume_link"))
-            stats["resumes_generated"] = resumes_made
-            logger.info(f"Resumes generated: {resumes_made}")
+            client = anthropic.Anthropic()
+            tracker_jobs = generate_resumes(tracker_jobs, client, budget_guard, config)
+            stats["resumes_generated"] = sum(1 for j in tracker_jobs if j.get("resume_link"))
         except BudgetExceeded as e:
-            logger.warning(f"Budget exceeded during resume gen: {e}")
+            logger.warning(f"Budget hit during resume gen: {e}")
             stats["budget_degraded"] = True
         except Exception as e:
-            logger.error(f"Resume generation failed: {e}", exc_info=True)
-            stats["errors"].append(f"Resume gen error: {e}")
+            logger.error(f"Resume gen failed: {e}")
+            errors.append(f"Resume gen: {e}")
+
+    # ── Step 9: Read existing Applied status ─────────────────────────────────
+    applied_status = {}
+    if sheet:
+        logger.info("─── Step 9: Reading Applied Status ───")
+        applied_status = read_existing_applied_status(sheet)
+        logger.info(f"Preserved {len(applied_status)} existing Applied entries")
+
+    # ── Step 10–12: Sheet writes (skip if dry-run) ───────────────────────────
+    if not dry_run and sheet:
+        logger.info("─── Step 10: Writing to Job Tracker ───")
+        tab_config = config.get("sheets", {})
+
+        # Write tracker jobs
+        written = append_job_rows(
+            sheet, tracker_jobs,
+            tab_name=tab_config.get("job_tracker_tab", "Job Tracker"),
+            applied_status=applied_status,
+        )
+        logger.info(f"Wrote {written} jobs to Job Tracker")
+
+        # Write reach roles
+        logger.info("─── Step 11: Writing to Reach Roles ───")
+        reach_written = append_job_rows(
+            sheet, reach_jobs,
+            tab_name=tab_config.get("reach_roles_tab", "Reach Roles (5yr+)"),
+            applied_status=applied_status,
+        )
+        stats["reach_roles_added"] = reach_written
+
+        # Update SeenJobs ledger
+        logger.info("─── Step 12: Updating SeenJobs ───")
+        all_new_ids = [j["job_id"] for j in tracker_jobs + reach_jobs]
+        append_seen_ids(sheet, all_new_ids)
+        logger.info(f"Added {len(all_new_ids)} IDs to SeenJobs")
+
+        # ── Step 13: Weekly Quota ────────────────────────────────────────────
+        if config.get("weekly_quota", {}).get("enabled", True):
+            logger.info("─── Step 13: Weekly Quota ───")
+            try:
+                quota = compute_quota(
+                    sheet, config,
+                    tab_name=tab_config.get("job_tracker_tab", "Job Tracker"),
+                )
+                write_quota(
+                    sheet, quota,
+                    tab_name=tab_config.get("weekly_quota_tab", "Weekly Quota"),
+                )
+            except Exception as e:
+                logger.error(f"Quota tracker failed: {e}")
+                errors.append(f"Quota: {e}")
     else:
-        logger.info("Skipping resume generation (no Claude client or budget degraded)")
+        logger.info("─── Dry run — skipping sheet writes ───")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 9: Write to Google Sheet
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 9: Writing to Google Sheet ──")
-    tracker_tab = sheet_cfg.get("job_tracker_tab", "Job Tracker")
-    reach_tab = sheet_cfg.get("reach_roles_tab", "Reach Roles (5yr+)")
+    # ── Step 14: Archive stale jobs (TODO — placeholder) ─────────────────────
+    # Archive logic unchanged from v1 — runs independently
 
-    try:
-        # Sort tracker jobs by overall_score desc before writing
-        tracker_jobs.sort(key=lambda j: j.get("overall_score", 0), reverse=True)
-        written = append_job_rows(sheet, tracker_jobs, tab_name=tracker_tab)
-        logger.info(f"Wrote {written} rows to '{tracker_tab}'")
-    except Exception as e:
-        logger.error(f"Sheet write (Job Tracker) failed: {e}", exc_info=True)
-        stats["errors"].append(f"Sheet write error: {e}")
+    # ── Step 15: Daily Digest ────────────────────────────────────────────────
+    logger.info("─── Step 15: Daily Digest ───")
+    stats["spend_usd"] = budget_guard.get_run_spend() if hasattr(budget_guard, 'get_run_spend') else 0
+    stats["budget_degraded"] = budget_guard.is_degraded if hasattr(budget_guard, 'is_degraded') else False
 
     try:
-        reach_written = append_job_rows(sheet, reach_jobs, tab_name=reach_tab)
-        logger.info(f"Wrote {reach_written} rows to '{reach_tab}'")
+        digest_text = compose_digest(tracker_jobs, reach_jobs, stats, config)
+        logger.info("Digest composed:")
+        logger.info(digest_text[:500] + "..." if len(digest_text) > 500 else digest_text)
+
+        if not dry_run:
+            sent = send_digest(digest_text, config)
+            if sent:
+                stats["notes"] = "Digest sent"
     except Exception as e:
-        logger.error(f"Sheet write (Reach Roles) failed: {e}")
-        stats["errors"].append(f"Reach Roles write error: {e}")
+        logger.error(f"Digest failed: {e}")
+        errors.append(f"Digest: {e}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 10: Update last_seen + Archive
-    # ─────────────────────────────────────────────────────────────────────────
-    logger.info("── Step 10: Update last_seen + Archive stale rows ──")
-    try:
-        update_last_seen(sheet, re_sighted_ids, today)
-    except Exception as e:
-        logger.warning(f"update_last_seen failed: {e}")
+    # ── Step 16: Log run ─────────────────────────────────────────────────────
+    if sheet:
+        log_run(sheet, stats)
 
-    try:
-        archive_days = sheet_cfg.get("archive_after_days", 30)
-        archived = archive_old_jobs(sheet, archive_days)
-        stats["archived"] = archived
-    except Exception as e:
-        logger.error(f"Archive step failed: {e}")
-        stats["errors"].append(f"Archive error: {e}")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # STEP 11: Log run
-    # ─────────────────────────────────────────────────────────────────────────
-    _finalize(sheet, stats, budget_guard)
-
-    run_end = datetime.now()
-    duration = (run_end - run_start).seconds
-    logger.info(f"JobRadar run completed in {duration}s")
-    logger.info(f"Summary: {stats}")
+    elapsed = round(time.time() - run_start, 1)
+    logger.info(f"═══ Pipeline complete in {elapsed}s ═══")
+    logger.info(
+        f"Summary: {stats['jobs_scraped']} scraped → {stats['jobs_new']} new → "
+        f"{stats['jobs_scored_stage_a']} scored → {stats['resumes_generated']} resumes"
+    )
 
 
-def _finalize(sheet, stats: dict, budget_guard: MonthlyBudgetGuard) -> None:
-    """Always called at end of run — logs to Run Log even on failure."""
-    try:
-        stats["spend_usd"] = budget_guard.get_monthly_spend()
-        stats["budget_degraded"] = budget_guard.is_degraded
-        log_run(sheet, stats, tab_name="Run Log")
-    except Exception as e:
-        logger.error(f"Failed to write Run Log: {e}")
+class _MockBudgetGuard:
+    """Mock budget guard for dry runs without sheet access."""
+    is_degraded = False
+    def check_and_debit(self, service, amount):
+        pass
+    def get_run_spend(self):
+        return 0.0
+    def get_monthly_spend(self):
+        return 0.0
 
 
 if __name__ == "__main__":

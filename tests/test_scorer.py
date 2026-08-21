@@ -1,14 +1,12 @@
 """
-Tests for the JobRadar scoring engine.
+Tests for the JobRadar v2 scoring engine.
 
-Validates that the score calibration matches the manual scoring already
-proven in the spreadsheet work:
-
- 1. BNP Paribas Jr. AML-type fresher role → scores HIGH (exp_fit=10, high overall)
+Validates that the score calibration matches the v2 specification:
+ 1. BNP Paribas Jr. AML-type fresher role → scores HIGH (exp_fit=100, high overall)
  2. CodeVyasa 4+YOE Data Engineer role → capped/flagged as stretch/exclude
  3. Tier 1 Data Analyst outranks mediocre Tier 2 Product Associate
  4. Strong-fit Tier 2 (AI Product Associate with data chops) CAN beat weak Tier 1
- 5. 0–3 day old posting gets recency bonus; >30 day old gets none
+ 5. 0–3 day old posting gets max freshness score; >30 day old gets none
  6. "exclude" gate (5YOE) means routing='reach_roles', not 'job_tracker'
 """
 import yaml
@@ -17,7 +15,7 @@ import pytest
 from src.scorer import (
     experience_gate,
     skill_match_score,
-    recency_bonus,
+    freshness_score,
     compute_stage_a,
     score_all_stage_a,
 )
@@ -34,25 +32,25 @@ with open("config.yaml", encoding="utf-8") as f:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestExperienceGate:
-    def test_fresher_scores_10(self):
+    def test_fresher_scores_100(self):
         label, score = experience_gate(0)
         assert label == "ideal_fresher"
-        assert score == 10
+        assert score == 100
 
-    def test_1yr_scores_9(self):
+    def test_1yr_scores_90(self):
         label, score = experience_gate(1)
         assert label == "ideal_1yr"
-        assert score == 9
+        assert score == 90
 
-    def test_2yr_scores_6(self):
+    def test_2yr_scores_60(self):
         label, score = experience_gate(2)
         assert label == "pass"
-        assert score == 6
+        assert score == 60
 
     def test_3yr_is_stretch(self):
         label, score = experience_gate(3)
         assert label == "stretch"
-        assert score == 3
+        assert score == 30
 
     def test_5yr_excluded(self):
         label, score = experience_gate(5)
@@ -62,7 +60,7 @@ class TestExperienceGate:
     def test_none_is_unknown_neutral(self):
         label, score = experience_gate(None)
         assert label == "unknown"
-        assert score == 5
+        assert score == 50
 
     def test_fresher_beats_2yr_on_exp_fit(self):
         """Fresher posting (0 YOE) must score higher than 2YOE posting."""
@@ -83,45 +81,45 @@ class TestSkillMatch:
 
     def test_partial_match(self):
         score = skill_match_score("Python and SQL required", self.SKILLS)
-        assert 0 < score < 10
+        assert 0 < score < 100
 
-    def test_high_overlap_near_10(self):
+    def test_high_overlap_near_100(self):
         jd = "Python, SQL, Power BI, machine learning, EDA, pandas, data analysis"
         score = skill_match_score(jd, self.SKILLS)
-        assert score >= 9.0
+        assert score >= 50.0
 
     def test_empty_jd_returns_zero(self):
         assert skill_match_score("", self.SKILLS) == 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Unit tests: recency_bonus
+# Unit tests: freshness_score
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestRecencyBonus:
+class TestFreshnessScore:
     def test_fresh_0_days_gets_max_bonus(self):
-        bonus = recency_bonus(0, CONFIG)
-        assert bonus == CONFIG["scoring"]["recency_bonus"]["days_0_to_3"]
+        bonus = freshness_score(0, CONFIG)
+        assert bonus == CONFIG["scoring_v2"]["freshness_scores"]["days_0_to_3"]
 
     def test_3_days_still_max_bonus(self):
-        assert recency_bonus(3, CONFIG) == CONFIG["scoring"]["recency_bonus"]["days_0_to_3"]
+        assert freshness_score(3, CONFIG) == CONFIG["scoring_v2"]["freshness_scores"]["days_0_to_3"]
 
     def test_4_days_lower_bonus(self):
-        assert recency_bonus(4, CONFIG) < recency_bonus(3, CONFIG)
+        assert freshness_score(4, CONFIG) < freshness_score(3, CONFIG)
 
     def test_over_30_days_no_bonus(self):
-        assert recency_bonus(31, CONFIG) == 0.0
+        assert freshness_score(31, CONFIG) == 0.0
 
     def test_unknown_age_small_neutral(self):
-        bonus = recency_bonus(None, CONFIG)
-        assert 0 <= bonus <= 1.0
+        bonus = freshness_score(None, CONFIG)
+        assert 0 <= bonus <= 50.0
 
-    def test_recency_decreases_monotonically(self):
-        """Newer always beats older for recency bonus."""
-        assert recency_bonus(1, CONFIG) >= recency_bonus(5, CONFIG)
-        assert recency_bonus(5, CONFIG) >= recency_bonus(10, CONFIG)
-        assert recency_bonus(10, CONFIG) >= recency_bonus(20, CONFIG)
-        assert recency_bonus(20, CONFIG) >= recency_bonus(35, CONFIG)
+    def test_freshness_decreases_monotonically(self):
+        """Newer always beats older for freshness."""
+        assert freshness_score(1, CONFIG) >= freshness_score(5, CONFIG)
+        assert freshness_score(5, CONFIG) >= freshness_score(10, CONFIG)
+        assert freshness_score(10, CONFIG) >= freshness_score(20, CONFIG)
+        assert freshness_score(20, CONFIG) >= freshness_score(35, CONFIG)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,6 +131,7 @@ def _make_job(
     company="TestCo",
     category="mumbai",
     role_tier="tier1_core_data",
+    priority_tier=2,
     exp_min=0,
     days_old=1,
     salary_text="12 LPA",
@@ -145,6 +144,9 @@ def _make_job(
         "company": company,
         "category": category,
         "role_tier": role_tier,
+        "priority_tier": priority_tier,
+        "priority_tier_name": "Data / Product Analytics",
+        "region": "mumbai_metro",
         "experience_required_min": exp_min,
         "experience_required_text": f"{exp_min} years",
         "days_old": days_old,
@@ -159,20 +161,21 @@ def _make_job(
 class TestStageAIntegration:
 
     def test_bnp_paribas_jr_role_scores_high(self):
-        """BNP Paribas Jr. AML type fresher role should score well (exp_fit=10)."""
+        """BNP Paribas Jr. AML type fresher role should score well (exp_fit=100)."""
         job = _make_job(
             title="Junior Data Analyst",
             company="BNP Paribas",
             category="mumbai",
             role_tier="tier1_core_data",
+            priority_tier=2,
             exp_min=0,
             days_old=2,
             jd="Fresher / 0-1 years. Python, SQL, Excel, Data Analyst, analytical skills, finance"
         )
         result = compute_stage_a(job, CONFIG)
         assert result["experience_gate_label"] == "ideal_fresher"
-        assert result["experience_fit_score"] == 10
-        assert result["stage_a_score"] >= 5.0  # should score decently overall
+        assert result["experience_fit_score"] == 100
+        assert result["stage_a_score"] >= 50.0  # should score decently overall
         assert result["routing"] == "job_tracker"
 
     def test_codevyasa_4yr_role_gets_excluded_or_stretch(self):
@@ -182,6 +185,7 @@ class TestStageAIntegration:
             company="CodeVyasa",
             category="india_remote",
             role_tier="tier1_core_data",
+            priority_tier=1,
             exp_min=5,
             days_old=3,
             jd="Requires 5+ years experience. PySpark, Scala, advanced Hadoop. Senior Data Engineer."
@@ -195,6 +199,7 @@ class TestStageAIntegration:
         tier1_job = _make_job(
             title="Data Analyst",
             role_tier="tier1_core_data",
+            priority_tier=2,
             category="mumbai",
             exp_min=1,
             days_old=2,
@@ -203,6 +208,7 @@ class TestStageAIntegration:
         tier2_job = _make_job(
             title="Product Associate",
             role_tier="tier2_broader",
+            priority_tier=4,
             category="mumbai",
             exp_min=1,
             days_old=5,
@@ -222,6 +228,7 @@ class TestStageAIntegration:
         strong_tier2 = _make_job(
             title="AI Product Associate",
             role_tier="tier2_broader",
+            priority_tier=4,
             category="mumbai",
             exp_min=0,      # fresher
             days_old=1,     # very fresh
@@ -231,6 +238,7 @@ class TestStageAIntegration:
         weak_tier1 = _make_job(
             title="Data Engineer",
             role_tier="tier1_core_data",
+            priority_tier=1,
             category="global_remote",
             exp_min=2,
             days_old=28,    # old posting
@@ -276,25 +284,24 @@ class TestStageAIntegration:
 
 class TestTierCalibration:
     """
-    Per the brief: if Tier 2 results never appear in the top 10, the penalty
-    is too high. If Tier 2 results dominate, it's too low.
-    These tests enforce the calibration at a boundary level.
+    Enforce calibration at a boundary level.
     """
 
     def test_tier2_penalty_not_zero(self):
-        """Tier 2 must have some penalty vs Tier 1 on identical jobs."""
+        """Higher tier number (lower priority) must have some penalty vs Tier 1 on identical jobs."""
         base_jd = "Python SQL pandas EDA data analysis machine learning"
-        tier1 = _make_job(title="Data Analyst", role_tier="tier1_core_data", jd=base_jd)
-        tier2 = _make_job(title="Business Analyst", role_tier="tier2_broader", jd=base_jd)
+        tier1 = _make_job(title="Data Engineer", priority_tier=1, role_tier="tier1_core_data", jd=base_jd)
+        tier2 = _make_job(title="AI Product Analyst", priority_tier=4, role_tier="tier2_broader", jd=base_jd)
         t1 = compute_stage_a(tier1, CONFIG)
         t2 = compute_stage_a(tier2, CONFIG)
-        assert t1["stage_a_score"] > t2["stage_a_score"], "Tier 1 should outscore Tier 2 on identical content"
+        assert t1["stage_a_score"] > t2["stage_a_score"], "Tier 1 should outscore Tier 4 on identical content"
 
     def test_tier2_penalty_not_total_exclusion(self):
-        """Tier 2 jobs should NOT be totally crushed — a great-fit Tier 2 must still reach the tracker."""
+        """Lower priority jobs should NOT be totally crushed — a great-fit role must still reach the tracker."""
         great_tier2 = _make_job(
             title="AI Product Associate",
             role_tier="tier2_broader",
+            priority_tier=4,
             category="mumbai",
             exp_min=0,
             days_old=1,
@@ -302,5 +309,5 @@ class TestTierCalibration:
         )
         result = compute_stage_a(great_tier2, CONFIG)
         assert result["routing"] == "job_tracker", (
-            "A great-fit Tier 2 role should still reach Job Tracker, not be skipped"
+            "A great-fit Tier 2/4 role should still reach Job Tracker, not be skipped"
         )

@@ -1,0 +1,231 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar v2 — Funded Companies Database
+#
+# User-maintained, not live-scraped. Used by company_opportunity.py for
+# rule-based Company Opportunity Score. No paid API calls.
+#
+# Fields:
+#   name:        Company name (fuzzy-matched against scraped company field)
+#   last_round:  Seed | Series A | Series B | Series C+ | Public | Bootstrapped
+#   amount_usd:  Total funding amount in USD (approximate is fine)
+#   year:        Year of last known funding round
+#   tags:        Optional tags for categorization
+#   size:        Optional: small (<50) | medium (50-500) | large (500+)
+#
+# Scoring logic:
+#   - Seed = low stability, high growth-potential
+#   - Series C+ / Public = high stability, moderate growth-potential
+#   - Unfunded/bootstrapped = neutral (never zero)
+#   - Unknown companies default to neutral midpoint (50/100)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Indian AI/Data Companies ─────────────────────────────────────────────────
+- name: "Fractal Analytics"
+  last_round: "Series C+"
+  amount_usd: 360000000
+  year: 2022
+  tags: ["analytics", "AI", "consulting"]
+  size: "large"
+
+- name: "Tiger Analytics"
+  last_round: "Series B"
+  amount_usd: 50000000
+  year: 2022
+  tags: ["analytics", "AI", "consulting"]
+  size: "medium"
+
+- name: "Mu Sigma"
+  last_round: "Series C+"
+  amount_usd: 300000000
+  year: 2013
+  tags: ["analytics", "big data"]
+  size: "large"
+
+- name: "Sigmoid"
+  last_round: "Series A"
+  amount_usd: 12000000
+  year: 2021
+  tags: ["data engineering", "analytics"]
+  size: "medium"
+
+- name: "Netscribes"
+  last_round: "Bootstrapped"
+  amount_usd: 0
+  year: 2000
+  tags: ["research", "analytics", "data"]
+  size: "medium"
+
+- name: "Rubixe"
+  last_round: "Seed"
+  amount_usd: 500000
+  year: 2020
+  tags: ["AI", "ML", "startup"]
+  size: "small"
+
+- name: "Arcitech"
+  last_round: "Bootstrapped"
+  amount_usd: 0
+  year: 2015
+  tags: ["technology", "consulting"]
+  size: "small"
+
+- name: "Credence Analytics"
+  last_round: "Bootstrapped"
+  amount_usd: 0
+  year: 2012
+  tags: ["analytics", "fintech"]
+  size: "small"
+
+- name: "Razorpay"
+  last_round: "Series C+"
+  amount_usd: 741000000
+  year: 2021
+  tags: ["fintech", "payments"]
+  size: "large"
+
+- name: "Zerodha"
+  last_round: "Bootstrapped"
+  amount_usd: 0
+  year: 2010
+  tags: ["fintech", "trading"]
+  size: "large"
+
+- name: "Postman"
+  last_round: "Series C+"
+  amount_usd: 433000000
+  year: 2021
+  tags: ["developer tools", "API"]
+  size: "large"
+
+- name: "PhonePe"
+  last_round: "Series C+"
+  amount_usd: 850000000
+  year: 2023
+  tags: ["fintech", "payments"]
+  size: "large"
+
+- name: "Swiggy"
+  last_round: "Public"
+  amount_usd: 3600000000
+  year: 2024
+  tags: ["food delivery", "commerce"]
+  size: "large"
+
+- name: "Zomato"
+  last_round: "Public"
+  amount_usd: 2200000000
+  year: 2021
+  tags: ["food delivery", "commerce"]
+  size: "large"
+
+- name: "CRED"
+  last_round: "Series C+"
+  amount_usd: 900000000
+  year: 2022
+  tags: ["fintech"]
+  size: "large"
+
+- name: "Meesho"
+  last_round: "Series C+"
+  amount_usd: 1100000000
+  year: 2021
+  tags: ["commerce", "social commerce"]
+  size: "large"
+
+- name: "Haptik"
+  last_round: "Acquired"
+  amount_usd: 100000000
+  year: 2019
+  tags: ["AI", "NLP", "chatbot"]
+  size: "medium"
+
+- name: "Observe.AI"
+  last_round: "Series B"
+  amount_usd: 213000000
+  year: 2022
+  tags: ["AI", "NLP", "contact center"]
+  size: "medium"
+
+- name: "SarvamAI"
+  last_round: "Series A"
+  amount_usd: 41000000
+  year: 2024
+  tags: ["AI", "LLM", "Indic languages"]
+  size: "small"
+
+- name: "Krutrim"
+  last_round: "Series A"
+  amount_usd: 50000000
+  year: 2024
+  tags: ["AI", "LLM", "Ola"]
+  size: "small"
+
+- name: "Uniphore"
+  last_round: "Series C+"
+  amount_usd: 610000000
+  year: 2022
+  tags: ["AI", "NLP", "enterprise"]
+  size: "large"
+
+- name: "Yellow.ai"
+  last_round: "Series C+"
+  amount_usd: 102000000
+  year: 2021
+  tags: ["AI", "chatbot", "enterprise"]
+  size: "medium"
+
+- name: "Hasura"
+  last_round: "Series C"
+  amount_usd: 136500000
+  year: 2022
+  tags: ["developer tools", "GraphQL", "data"]
+  size: "medium"
+
+- name: "Atlan"
+  last_round: "Series C"
+  amount_usd: 155000000
+  year: 2023
+  tags: ["data governance", "data catalog"]
+  size: "medium"
+
+- name: "5x"
+  last_round: "Series A"
+  amount_usd: 16000000
+  year: 2024
+  tags: ["data engineering", "data platform"]
+  size: "small"
+
+- name: "Scribble Data"
+  last_round: "Series A"
+  amount_usd: 6000000
+  year: 2022
+  tags: ["ML", "feature engineering"]
+  size: "small"
+
+- name: "Sprinklr"
+  last_round: "Public"
+  amount_usd: 570000000
+  year: 2021
+  tags: ["AI", "customer experience", "enterprise"]
+  size: "large"
+
+- name: "Freshworks"
+  last_round: "Public"
+  amount_usd: 484000000
+  year: 2021
+  tags: ["SaaS", "AI", "enterprise"]
+  size: "large"
+
+- name: "BrowserStack"
+  last_round: "Series C"
+  amount_usd: 300000000
+  year: 2021
+  tags: ["developer tools", "testing"]
+  size: "large"
+
+- name: "Druva"
+  last_round: "Series C+"
+  amount_usd: 475000000
+  year: 2019
+  tags: ["cloud", "data protection"]
+  size: "large"

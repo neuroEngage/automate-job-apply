@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar v2 — Company Watchlist
+#
+# Companies to check directly via their careers page for new openings.
+# The watchlist module fetches each URL, searches for job titles matching
+# any of the 6 role-priority tiers, and emits matches into the pipeline.
+#
+# Fields:
+#   name:             Company name
+#   careers_page_url: Direct URL to their careers/jobs page
+#   tags:             Optional tags for categorization
+#
+# Cache: Checks are cached per-company. A company checked <20h ago is skipped.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "Fractal Analytics"
+  careers_page_url: "https://fractal.ai/careers"
+  tags: ["analytics", "AI", "Series C+"]
+
+- name: "Netscribes"
+  careers_page_url: "https://www.netscribes.com/careers/"
+  tags: ["research", "analytics", "data"]
+
+- name: "Rubixe"
+  careers_page_url: "https://www.rubixe.com/careers"
+  tags: ["AI", "ML", "startup"]
+
+- name: "Arcitech"
+  careers_page_url: "https://arcitech.ai/careers"
+  tags: ["technology", "AI"]
+
+- name: "Credence Analytics"
+  careers_page_url: "https://www.credenceanalytics.com/careers"
+  tags: ["analytics", "fintech"]
+
+- name: "Observe.AI"
+  careers_page_url: "https://www.observe.ai/careers"
+  tags: ["AI", "NLP", "contact center"]
+
+- name: "SarvamAI"
+  careers_page_url: "https://www.sarvam.ai/careers"
+  tags: ["AI", "LLM", "Indic"]
+
+- name: "Yellow.ai"
+  careers_page_url: "https://yellow.ai/careers/"
+  tags: ["AI", "chatbot", "enterprise"]
+
+- name: "Atlan"
+  careers_page_url: "https://atlan.com/careers/"
+  tags: ["data governance", "data catalog"]
+
+- name: "Haptik"
+  careers_page_url: "https://www.haptik.ai/careers"
+  tags: ["AI", "NLP", "chatbot"]
+
+- name: "Tiger Analytics"
+  careers_page_url: "https://www.tigeranalytics.com/careers/"
+  tags: ["analytics", "AI", "consulting"]
+
+- name: "Sigmoid"
+  careers_page_url: "https://www.sigmoid.com/careers/"
+  tags: ["data engineering", "analytics"]
+
+- name: "Scribble Data"
+  careers_page_url: "https://www.scribbledata.io/careers"
+  tags: ["ML", "feature engineering"]

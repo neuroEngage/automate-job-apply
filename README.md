@@ -1,146 +1,74 @@
-# JobRadar — Daily Mumbai/India + High-Pay Remote Job Intelligence Agent
+# JobRadar v2 — Automated Daily Job Intelligence Engine
 
-Automated daily pipeline for Nagesh Khichade's AI/ML/Data job search.  
-Runs on GitHub Actions at **7:30 AM IST** every day. No manual trigger needed. ~$0.10–0.30/day.
-
----
-
-## What it does
-
-1. **Scrapes** LinkedIn (Apify), Naukri (Apify), Indeed/Glassdoor/Google/ZipRecruiter (JobSpy)
-2. **Deduplicates** using a permanent content-hash-based ledger — zero repeats ever
-3. **Validates** that job listings are still live on company careers pages (flags stale posts)
-4. **Scores** every new job: free rule-based Stage A (100% of jobs) + Claude Haiku Stage B (top scorers)
-5. **Generates** tailored ATS resumes (.docx) for top 5 jobs daily, uploaded to Google Drive
-6. **Writes** everything to a live Google Sheet with 5 tabs — always fresh, sortable, filterable
+Personal job-finding engine for **Nagesh Khichade** (AI/Data Science, ~1.4 YOE).
+Scrapes listings across LinkedIn, Naukri, Indeed, Glassdoor, Google Jobs, and ZipRecruiter, scores them with a 9-component formula, cross-validates against company career pages, tailors ATS resumes, tracks weekly quotas, and updates Google Sheets.
 
 ---
 
-## Tabs in the Google Sheet
+## What's New in v2
 
-| Tab | Purpose |
-|-----|---------|
-| **Job Tracker** | Main live view — all new jobs sorted by Overall Score |
-| **SeenJobs** | Hidden dedup ledger — never touch this manually |
-| **Archive** | Jobs older than 30 days (auto-moved) |
-| **Reach Roles (5yr+)** | Jobs requiring >4 YOE — visible but separated |
-| **Run Log** | One row per daily run — check this first if something looks off |
-
----
-
-## First-time Setup
-
-### 1. Fork / clone this repo
-```bash
-git clone https://github.com/YOUR_USERNAME/job-appl.git
-cd job-appl
-```
-
-### 2. Create a fresh Google Sheet
-- Go to [sheets.google.com](https://sheets.google.com) → Create new sheet
-- Name it anything (e.g. `JobRadar Live`)
-- Copy the Sheet ID from the URL: `https://docs.google.com/spreadsheets/d/**SHEET_ID**/edit`
-
-### 3. Set up Google Cloud service account
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a new project (or use existing)
-3. Enable **Google Sheets API** and **Google Drive API**
-4. Create a **Service Account** → Create key → **JSON** type
-5. Download the JSON key file
-6. Share your Google Sheet with the service account email (Editor access)
-7. Create a Google Drive folder for resumes → share with same service account email
-8. Copy the Drive folder ID from its URL
-
-### 4. Get API keys
-- **Apify**: [apify.com](https://apify.com) → Account → API tokens
-- **Anthropic**: [console.anthropic.com](https://console.anthropic.com) → API Keys
-
-### 5. Add GitHub Secrets
-Go to your repo → Settings → Secrets and variables → Actions → New repository secret:
-
-| Secret Name | Value |
-|-------------|-------|
-| `APIFY_TOKEN` | Your Apify API token |
-| `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Full contents of your service account JSON key |
-| `GOOGLE_SHEET_ID` | ID of your Google Sheet |
-| `GOOGLE_DRIVE_FOLDER_ID` | ID of your Google Drive resumes folder |
-
-### 6. Populate resume_base.json ← **Required for resume generation**
-Open [`resume_base.json`](resume_base.json) and:
-- Replace all `YOUR_*`, `YYYY-MM`, and `Placeholder —` values with real data
-- Update duration_months for internships
-- Change `_validation_sentinel` to `"POPULATED"` when done
-- The pipeline will silently skip resume gen (no error) until this is done
+1. **6-Tier Role Priority System**: Replaces the previous 2-tier title list with 6 structured tiers:
+   - Tier 1: Data Engineering (#1 Priority)
+   - Tier 2: Data / Product Analytics (#2 Priority)
+   - Tier 3: Core AI/ML (#3 Priority)
+   - Tier 4: AI + Product/Business (#4 Priority)
+   - Tier 5: Founder's Office / Strategy / Startup Generalist (#5 Priority)
+   - Tier 6: AI Startups / AI+GTM / Growth (#6 Priority)
+2. **9-Component Scoring Formula (0–100 Scale)**:
+   - Data/AI Skill Match (25%): TF-IDF cosine similarity against candidate skills + tier keywords
+   - Role Priority Match (20%): Direct score from Priority Tier (Tier 1 = 100)
+   - Fresher Compatibility (10%): Experience gate (0 YOE = 100, 1 YOE = 90)
+   - AI/Technology Exposure (10%): AI/GenAI/LLM keyword density
+   - Company Opportunity Score (10%): Funding lookup from `funded_companies.yaml` + ownership keywords
+   - Location Fit (10%): Region-based (Mumbai metro > Navi Mumbai > Thane > Pune > India remote > Global remote)
+   - Job Freshness (5%): 0–3 days = 100, 4–7 days = 80
+   - Product/Business Exposure (5%): Keyword hits (product, roadmap, GTM, ownership)
+   - Startup/Ownership Potential (5%): Keyword hits (founder, 0-to-1, fast-paced)
+3. **Company Opportunity Score Module (`src/company_opportunity.py`)**: Uses `funded_companies.yaml` (30+ curated Indian tech/AI companies) + JD keyword analysis.
+4. **AI Signal Detector Module (`src/ai_signal_detector.py`)**: Regex & density analysis for 30+ AI/GenAI/LLM terms.
+5. **Explainable Score Breakdown (`src/explainer.py`)**: Generates per-job human-readable breakdown + compact sheet summary.
+6. **Geographic Expansion**: Pune added (`pune_local`, `naukri_pune`) alongside Mumbai Metropolitan Region coverage (Mumbai, Navi Mumbai, Thane).
+7. **10-Category Output Structure**: Categorizes jobs across 6 tiers + 4 cross-cutting categories (Established Company, Remote, Unconventional).
+8. **Company Watchlist (`src/company_watchlist.py`)**: Direct career-page monitoring configured via `company_watchlist.yaml`.
+9. **Weekly Quota Tracker (`src/quota_tracker.py`)**: Tracks applied jobs by priority tier against target weekly distributions on the `Weekly Quota` sheet tab.
+10. **"Applied" Tracking Loop-back**: Preserves manual `Applied` checkmarks on re-runs without clobbering.
+11. **Daily Digest (`src/digest.py`)**: 10-section categorized digest delivered via Email or Webhook.
 
 ---
 
-## Running Locally (for testing)
+## Anti-Regression Rules (Non-Negotiable)
 
-```bash
-# Install deps
-pip install -r requirements.txt
-
-# Set env vars (Windows PowerShell)
-$env:APIFY_TOKEN="your_token"
-$env:ANTHROPIC_API_KEY="your_key"
-$env:GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
-$env:GOOGLE_SHEET_ID="your_sheet_id"
-$env:GOOGLE_DRIVE_FOLDER_ID="your_folder_id"
-
-# Run pipeline
-python main.py
-
-# Run tests (no API keys needed for tests)
-python -m pytest tests/ -v
-```
+1. **No fabrication**: Resume generator never invents facts not in `resume_base.json`.
+2. **No >4 YOE in main tracker**: Route to `Reach Roles (5yr+)` tab.
+3. **No duplicate `job_id`s**: Content-hash ledger in `SeenJobs` tab.
+4. **No budget overrun**: Strict $10/month hard cap enforced via `MonthlyBudgetGuard`.
+5. **No auto-apply**: JobRadar discovers, scores, validates, and stages. Nagesh applies manually.
+6. **No silent failures**: All non-fatal errors logged to `Run Log` tab in Google Sheets.
 
 ---
 
-## Retuning without touching code
-
-All scoring thresholds, title lists, and budget settings live in **[`config.yaml`](config.yaml)**.
+## Configuration (`config.yaml`)
 
 Key sections:
-- `candidate_profile.target_titles_tier1_core_data` — add/remove Tier 1 job titles
-- `candidate_profile.target_titles_tier2_broader` — add/remove Tier 2 titles
-- `scoring.recency_bonus` — adjust recency weight (0–3 days currently gets highest bonus)
-- `scoring.resume_min_score` — threshold for resume generation (currently 7.5)
-- `budget.monthly_ceiling_usd` — hard monthly spend cap (currently $10)
-- `validation.enabled` — toggle company page validation on/off
+- `candidate_profile`: Skills, YOE rules, compensation thresholds
+- `role_priorities`: 6 tiers with titles and signal keywords
+- `sources`: Scraper targets (Mumbai, Pune, India Remote, Naukri, Global Remote)
+- `scoring_v2`: Component weights, tier scores, location scores, freshness scores
+- `weekly_quota`: Target allocation percentages (e.g. 40% T1, 30% T2, 20% T3, 10% T4-6)
+- `company_watchlist`: Watchlist settings and cache limits
+- `digest`: Daily digest settings and caps
 
 ---
 
-## Cost breakdown (target ~$0.10–0.30/day)
+## Running Locally
 
-| Item | Est. Cost | Cap |
-|------|-----------|-----|
-| Apify LinkedIn | ~$0.02–0.05/day | `max_charge_usd_per_call` per call |
-| Apify Naukri | ~$0.01–0.03/day | `max_charge_usd_per_call` per call |
-| JobSpy (Indeed/Glassdoor/Google/ZipRecruiter) | **$0** | Free library |
-| Claude Haiku Stage B scoring | ~$0.02–0.08/day | Budget guard trips at $10/month |
-| Claude Haiku resume generation | ~$0.05–0.15/day | Hard cap: 5 resumes/day |
-| GitHub Actions compute | **$0** | Well within free tier |
-| Google Sheets/Drive API | **$0** | Free tier quota far exceeds this volume |
-| **Total** | **~$0.10–0.30/day** | **$10/month hard cap** |
+```bash
+# Run pytest tests
+pytest tests/ -v
 
----
+# Run fresh scan
+python main.py
 
-## Checking if something went wrong
-
-1. Open your Google Sheet → **Run Log** tab
-2. Check the `errors` column for that day's run
-3. Download the run log artifact from GitHub Actions (Repo → Actions → latest run → Artifacts)
-
----
-
-## Anti-regression rules (never bypass these)
-
-1. **No fabrication** — every resume bullet traces to `resume_base.json`. No new facts invented.
-2. **No >4 YOE roles in main tracker** — they go to "Reach Roles" tab only.
-3. **No duplicate job_ids** — SeenJobs ledger never pruned; content hash persists forever.
-4. **No budget overrun** — MonthlyBudgetGuard degrades gracefully when ceiling hit.
-5. **No auto-apply** — this system surfaces and prepares; Nagesh clicks Apply.
-6. **No silent failures** — every run writes to Run Log, even failed ones.
-
-<!-- workflow re-index trigger -->
+# Clear all previous scraped jobs and caches
+python clear_and_reset.py
+```

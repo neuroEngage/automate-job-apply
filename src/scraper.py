@@ -1,10 +1,12 @@
 """
-JobRadar — Scraping Layer
+JobRadar v2 — Scraping Layer
 Sources: Apify LinkedIn, Apify Naukri, JobSpy (Indeed/Google/Glassdoor/ZipRecruiter)
 
-Each source is called TWICE per run: once for tier1_core_data titles, once for
-tier2_broader titles. This ensures every incoming job is tagged with role_tier
-before scoring (required by the Role Tier weight in Stage A).
+v2 changes:
+  - Iterates over 6 role-priority tiers (replaces 2-tier system)
+  - Adds Pune sources (pune_local, naukri_pune)
+  - Expanded Mumbai metro coverage via broad location query
+  - Each source runs ONCE per tier with that tier's title list
 """
 import logging
 import os
@@ -50,7 +52,8 @@ def _run_apify_actor(
 
 def scrape_linkedin(
     titles: list[str],
-    role_tier: str,
+    tier_num: int,
+    tier_name: str,
     location: str,
     date_posted: str,
     max_results_per_title: int,
@@ -59,7 +62,7 @@ def scrape_linkedin(
 ) -> list[dict]:
     """
     Calls the Apify LinkedIn Jobs Scraper for each title in the list.
-    Returns raw dicts tagged with source='linkedin', role_tier, category.
+    Returns raw dicts tagged with source='linkedin', tier info, category.
     """
     results = []
     category = _location_to_category(location)
@@ -81,7 +84,9 @@ def scrape_linkedin(
             )
             for item in items:
                 item["_source"] = "linkedin"
-                item["_role_tier"] = role_tier
+                item["_role_tier"] = _tier_to_legacy(tier_num)
+                item["_priority_tier"] = tier_num
+                item["_priority_tier_name"] = tier_name
                 item["_category"] = category
                 item["_search_title"] = title
             results.extend(items)
@@ -98,17 +103,19 @@ def scrape_linkedin(
 
 def scrape_naukri(
     titles: list[str],
-    role_tier: str,
+    tier_num: int,
+    tier_name: str,
     location: str,
     experience_min: int,
     experience_max: int,
     max_results_per_title: int,
     max_charge_usd: float,
     budget_guard,
+    category_override: str = "naukri",
 ) -> list[dict]:
     """
-    Calls the Apify Naukri Scraper (epic-scrapers/naukri-scraper) for each title.
-    Returns raw dicts tagged with source='naukri', role_tier, category='naukri'.
+    Calls the Apify Naukri Scraper for each title.
+    Returns raw dicts tagged with source='naukri', tier info, category.
     """
     results = []
 
@@ -129,8 +136,10 @@ def scrape_naukri(
             )
             for item in items:
                 item["_source"] = "naukri"
-                item["_role_tier"] = role_tier
-                item["_category"] = "naukri"
+                item["_role_tier"] = _tier_to_legacy(tier_num)
+                item["_priority_tier"] = tier_num
+                item["_priority_tier_name"] = tier_name
+                item["_category"] = category_override
                 item["_search_title"] = title
             results.extend(items)
         except Exception as e:
@@ -146,7 +155,8 @@ def scrape_naukri(
 
 def scrape_jobspy_source(
     titles: list[str],
-    role_tier: str,
+    tier_num: int,
+    tier_name: str,
     sites: list[str],
     location: str,
     is_remote: bool,
@@ -157,7 +167,7 @@ def scrape_jobspy_source(
 ) -> list[dict]:
     """
     Calls JobSpy's scrape_jobs() for each title, each country (for global_remote).
-    Returns raw dicts tagged with source, role_tier, category.
+    Returns raw dicts tagged with source, tier info, category.
     """
     results = []
     countries = country_indeed if isinstance(country_indeed, list) else [country_indeed] if country_indeed else [None]
@@ -184,7 +194,9 @@ def scrape_jobspy_source(
                 for _, row in df.iterrows():
                     item = row.to_dict()
                     item["_source"] = row.get("site", "jobspy")
-                    item["_role_tier"] = role_tier
+                    item["_role_tier"] = _tier_to_legacy(tier_num)
+                    item["_priority_tier"] = tier_num
+                    item["_priority_tier_name"] = tier_name
                     item["_category"] = category
                     item["_search_title"] = title
                     results.append(item)
@@ -201,76 +213,121 @@ def scrape_jobspy_source(
 
 def run_all_scrapers(config: dict, budget_guard) -> list[dict]:
     """
-    Runs all configured scrapers (LinkedIn, Naukri, JobSpy) for both title
-    tiers. Returns a combined flat list of raw job dicts ready for normalisation.
+    Runs all configured scrapers for all 6 role-priority tiers.
+    Returns a combined flat list of raw job dicts ready for normalisation.
     """
-    profile = config["candidate_profile"]
     sources = config["sources"]
-    tier1 = profile["target_titles_tier1_core_data"]
-    tier2 = profile["target_titles_tier2_broader"]
+    role_priorities = config.get("role_priorities", [])
 
     all_raw: list[dict] = []
 
-    # ── LinkedIn — Mumbai ───────────────────────────────────────────────────
-    li_cfg = sources["mumbai_local"]
-    for tier_name, titles in [("tier1_core_data", tier1), ("tier2_broader", tier2)]:
-        logger.info(f"Scraping LinkedIn Mumbai [{tier_name}] — {len(titles)} titles")
-        all_raw.extend(scrape_linkedin(
-            titles=titles,
-            role_tier=tier_name,
-            location=li_cfg["location"],
-            date_posted=li_cfg["date_posted"],
-            max_results_per_title=li_cfg["max_results_per_title"],
-            max_charge_usd=li_cfg["max_charge_usd_per_call"],
-            budget_guard=budget_guard,
-        ))
+    for tier_config in role_priorities:
+        tier_num = tier_config["tier"]
+        tier_name = tier_config["name"]
+        titles = tier_config["titles"]
 
-    # ── Naukri ──────────────────────────────────────────────────────────────
-    na_cfg = sources["naukri"]
-    for tier_name, titles in [("tier1_core_data", tier1), ("tier2_broader", tier2)]:
-        logger.info(f"Scraping Naukri [{tier_name}] — {len(titles)} titles")
-        all_raw.extend(scrape_naukri(
-            titles=titles,
-            role_tier=tier_name,
-            location=na_cfg["location"],
-            experience_min=na_cfg["experience_min"],
-            experience_max=na_cfg["experience_max"],
-            max_results_per_title=na_cfg["max_results_per_title"],
-            max_charge_usd=na_cfg["max_charge_usd_per_call"],
-            budget_guard=budget_guard,
-        ))
+        if not titles:
+            continue
 
-    # ── JobSpy — India Remote ────────────────────────────────────────────────
-    ir_cfg = sources["india_remote"]
-    for tier_name, titles in [("tier1_core_data", tier1), ("tier2_broader", tier2)]:
-        logger.info(f"Scraping JobSpy India Remote [{tier_name}] — {len(titles)} titles")
-        all_raw.extend(scrape_jobspy_source(
-            titles=titles,
-            role_tier=tier_name,
-            sites=ir_cfg["sites"],
-            location=ir_cfg["location"],
-            is_remote=ir_cfg["is_remote"],
-            hours_old=ir_cfg["hours_old"],
-            max_results_per_title=ir_cfg["max_results_per_title"],
-            country_indeed=ir_cfg.get("country_indeed"),
-            category="india_remote",
-        ))
+        logger.info(f"─── Scraping Tier {tier_num}: {tier_name} ({len(titles)} titles) ───")
 
-    # ── JobSpy — Global Remote ───────────────────────────────────────────────
-    gr_cfg = sources["global_remote"]
-    for tier_name, titles in [("tier1_core_data", tier1), ("tier2_broader", tier2)]:
-        logger.info(f"Scraping JobSpy Global Remote [{tier_name}] — {len(titles)} titles")
-        all_raw.extend(scrape_jobspy_source(
-            titles=titles,
-            role_tier=tier_name,
-            sites=gr_cfg["sites"],
-            location=gr_cfg["location"],
-            is_remote=gr_cfg["is_remote"],
-            hours_old=gr_cfg["hours_old"],
-            max_results_per_title=gr_cfg["max_results_per_title"],
-            country_indeed=gr_cfg.get("country_indeed"),
-            category="global_remote",
-        ))
+        # ── LinkedIn — Mumbai ─────────────────────────────────────────────────
+        if "mumbai_local" in sources:
+            li_cfg = sources["mumbai_local"]
+            logger.info(f"  LinkedIn Mumbai [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_linkedin(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                location=li_cfg["location"],
+                date_posted=li_cfg["date_posted"],
+                max_results_per_title=li_cfg["max_results_per_title"],
+                max_charge_usd=li_cfg["max_charge_usd_per_call"],
+                budget_guard=budget_guard,
+            ))
+
+        # ── LinkedIn — Pune (v2) ──────────────────────────────────────────────
+        if "pune_local" in sources:
+            pune_cfg = sources["pune_local"]
+            logger.info(f"  LinkedIn Pune [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_linkedin(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                location=pune_cfg["location"],
+                date_posted=pune_cfg["date_posted"],
+                max_results_per_title=pune_cfg["max_results_per_title"],
+                max_charge_usd=pune_cfg["max_charge_usd_per_call"],
+                budget_guard=budget_guard,
+            ))
+
+        # ── Naukri — Mumbai ───────────────────────────────────────────────────
+        if "naukri" in sources:
+            na_cfg = sources["naukri"]
+            logger.info(f"  Naukri Mumbai [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_naukri(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                location=na_cfg["location"],
+                experience_min=na_cfg["experience_min"],
+                experience_max=na_cfg["experience_max"],
+                max_results_per_title=na_cfg["max_results_per_title"],
+                max_charge_usd=na_cfg["max_charge_usd_per_call"],
+                budget_guard=budget_guard,
+                category_override="naukri",
+            ))
+
+        # ── Naukri — Pune (v2) ────────────────────────────────────────────────
+        if "naukri_pune" in sources:
+            nap_cfg = sources["naukri_pune"]
+            logger.info(f"  Naukri Pune [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_naukri(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                location=nap_cfg["location"],
+                experience_min=nap_cfg["experience_min"],
+                experience_max=nap_cfg["experience_max"],
+                max_results_per_title=nap_cfg["max_results_per_title"],
+                max_charge_usd=nap_cfg["max_charge_usd_per_call"],
+                budget_guard=budget_guard,
+                category_override="naukri_pune",
+            ))
+
+        # ── JobSpy — India Remote ─────────────────────────────────────────────
+        if "india_remote" in sources:
+            ir_cfg = sources["india_remote"]
+            logger.info(f"  JobSpy India Remote [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_jobspy_source(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                sites=ir_cfg["sites"],
+                location=ir_cfg["location"],
+                is_remote=ir_cfg["is_remote"],
+                hours_old=ir_cfg["hours_old"],
+                max_results_per_title=ir_cfg["max_results_per_title"],
+                country_indeed=ir_cfg.get("country_indeed"),
+                category="india_remote",
+            ))
+
+        # ── JobSpy — Global Remote ────────────────────────────────────────────
+        if "global_remote" in sources:
+            gr_cfg = sources["global_remote"]
+            logger.info(f"  JobSpy Global Remote [T{tier_num}] — {len(titles)} titles")
+            all_raw.extend(scrape_jobspy_source(
+                titles=titles,
+                tier_num=tier_num,
+                tier_name=tier_name,
+                sites=gr_cfg["sites"],
+                location=gr_cfg["location"],
+                is_remote=gr_cfg["is_remote"],
+                hours_old=gr_cfg["hours_old"],
+                max_results_per_title=gr_cfg["max_results_per_title"],
+                country_indeed=gr_cfg.get("country_indeed"),
+                category="global_remote",
+            ))
 
     logger.info(f"Total raw jobs scraped: {len(all_raw)}")
     return all_raw
@@ -284,6 +341,19 @@ def _location_to_category(location: str) -> str:
     loc = location.lower()
     if "mumbai" in loc:
         return "mumbai"
+    if "pune" in loc:
+        return "pune"
+    if "navi mumbai" in loc:
+        return "mumbai"
+    if "thane" in loc:
+        return "mumbai"
     if "india" in loc and "remote" not in loc:
         return "india_remote"
     return "global_remote"
+
+
+def _tier_to_legacy(tier_num: int) -> str:
+    """Map 6-tier number to legacy 2-tier role_tier string."""
+    if tier_num <= 3:
+        return "tier1_core_data"
+    return "tier2_broader"

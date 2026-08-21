@@ -56,13 +56,17 @@ def filter_new_jobs(jobs: list[dict], seen_ids: set[str]) -> tuple[list[dict], l
     return new_jobs, re_sighted
 
 
-def append_seen_ids(sheet, job_ids: list[str], today: date) -> None:
+get_seen_ids = load_seen_ids
+
+
+def append_seen_ids(sheet, job_ids: list[str], today: date | None = None) -> None:
     """
     Appends new job_ids to SeenJobs immediately after scrape — BEFORE scoring.
     This ensures a mid-run crash never causes a duplicate re-add next day.
     """
     if not job_ids:
         return
+    today = today or date.today()
     try:
         ws = sheet.worksheet("SeenJobs")
         rows = [[jid, str(today), str(today)] for jid in job_ids]
